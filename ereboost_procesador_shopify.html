@@ -334,7 +334,7 @@ tbody td { padding: 8px 12px; white-space: nowrap; max-width: 180px; overflow: h
   <!-- DROP ZONE SHOPIFY -->
   <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
     <span class="drop-icon">📂</span>
-    <div class="drop-title">1. Arrastra el CSV de Shopify aquí</div>
+    <div class="drop-title">2. Luego arrastra el CSV de Shopify aquí</div>
     <div class="drop-sub">
       o haz <strong>click para seleccionar</strong> el archivo<br>
       Exportado desde Shopify Admin → Pedidos → Exportar → <strong>CSV para Excel</strong>
@@ -345,10 +345,10 @@ tbody td { padding: 8px 12px; white-space: nowrap; max-width: 180px; overflow: h
   <!-- DROP ZONE BOLETAS -->
   <div class="drop-zone" id="drop-zone-boletas" style="margin-top:10px;border-color:var(--accent2);" onclick="document.getElementById('file-input-boletas').click()">
     <span class="drop-icon">🧾</span>
-    <div class="drop-title" id="boletas-title">2. Arrastra el Excel de Boletas aquí <span style="color:var(--muted);font-size:12px;font-weight:400;">(opcional)</span></div>
+    <div class="drop-title" id="boletas-title">1. Primero arrastra el Excel de Boletas aquí <span style="color:var(--muted);font-size:12px;font-weight:400;">(opcional)</span></div>
     <div class="drop-sub">
       o haz <strong>click para seleccionar</strong> · archivo <strong>.xlsx</strong> de boletas<br>
-      Se usará para completar el N° de boleta en la planilla Starken
+      Carga esto <strong>antes</strong> del CSV de Shopify para completar el N° de boleta en Starken
     </div>
     <input type="file" id="file-input-boletas" accept=".xlsx,.xls" />
   </div>
@@ -522,16 +522,9 @@ function handleBoletas(file) {
         const r = rows[i];
         if (!Array.isArray(r)) continue;
         const rawId = r[idCol] == null ? '' : r[idCol];
-        // Convertir a string limpio preservando todos los dígitos
-        let shopifyIdClean = '';
-        if (rawId !== '') {
-          try {
-            // Si es número entero (como viene de openpyxl/XLSX), convertir directo
-            shopifyIdClean = String(BigInt(Math.round(Number(rawId))));
-          } catch(e) {
-            shopifyIdClean = String(rawId).trim().replace(/\.0+$/, '');
-          }
-        }
+        // El ID en boletas viene como número entero nativo desde XLSX
+        // Convertir a string sin decimales — igual que el CSV de Shopify
+        const shopifyIdClean = rawId === '' ? '' : String(rawId).trim().replace(/\.0+$/, '');
         const folio = String(r[folioCol] == null ? '' : r[folioCol]).trim();
         if (shopifyIdClean && shopifyIdClean !== 'NaN' && folio) {
           boletasMap[shopifyIdClean] = { folio, monto: r[montoCol] || '' };
@@ -542,8 +535,13 @@ function handleBoletas(file) {
       if (count === 0) throw new Error('Se leyó el archivo pero no se encontraron boletas con ID de Shopify válido.');
 
       dzB.classList.add('loaded');
-      document.getElementById('boletas-title').textContent = `✅ Boletas cargadas — ${count} registros`;
+      document.getElementById('boletas-title').textContent = `✅ Boletas cargadas — ${count} registros · Carga ahora el CSV de Shopify`;
       document.getElementById('file-input-boletas').value = '';
+
+      // Si ya hay un CSV cargado, reprocessar automáticamente
+      if (processedData) {
+        alert(`✅ Boletas cargadas: ${count} registros.\n\nEl CSV de Shopify ya estaba cargado — vuelve a subirlo para aplicar los folios.`);
+      }
     } catch(err) {
       alert('Error leyendo boletas: ' + err.message);
     }
@@ -756,15 +754,12 @@ function processData({ headers, rows }, boletas = {}) {
   const getPhone  = r => getV(r, kPhone);
   const getEmail  = r => getV(r, kEmail);
   const getTotal  = r => getV(r, kTotal);
-  // ID de Shopify: viene como string en el CSV (evitar parseFloat que pierde precisión en 13 dígitos)
+  // ID de Shopify: SIEMPRE string puro — nunca pasar por Number() o parseFloat()
+  // El CSV trae "6488248189085" como texto, JS no debe tocarlo
   const getShopifyId = r => {
     const raw = getV(r, kId).trim();
-    if (!raw || raw === 'nan' || raw === 'NaN') return '';
-    // Si viene en notación científica (ej: 6.48676e+12), convertir con BigInt vía string
-    if (/e\+/i.test(raw)) {
-      try { return String(BigInt(Math.round(Number(raw)))); } catch(e) { return raw; }
-    }
-    // Si viene como entero normal o string limpio
+    if (!raw || raw === '' || raw.toLowerCase() === 'nan') return '';
+    // Limpiar solo puntos decimales innecesarios (.000)
     return raw.replace(/\.0+$/, '');
   };
   const getBoleta = r => {
