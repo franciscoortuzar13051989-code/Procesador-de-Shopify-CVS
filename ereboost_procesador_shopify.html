@@ -6,6 +6,8 @@
 <title>Ereboost · Procesador Shopify</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <style>
 :root {
   --bg: #0b0d11;
@@ -408,12 +410,12 @@ tbody td { padding: 8px 12px; white-space: nowrap; max-width: 180px; overflow: h
       <div class="prev-panel" id="panel-rblu"></div>
     </div>
 
-    <button class="download-btn" onclick="downloadExcel()">
-      ⬇ &nbsp;Descargar Excel con 6 pestañas
+    <button class="download-btn" onclick="downloadZIP()">
+      ⬇ &nbsp;Descargar ZIP con 6 archivos CSV
     </button>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
       <button class="csv-btn" onclick="downloadCSV('stk')">📄 CSV Starken</button>
-      <button class="csv-btn" onclick="downloadCSV('tll')">📄 CSV Te lo Llevo</button>
+      <button class="csv-btn" onclick="downloadTllXlsx()">📊 XLSX Te lo Llevo</button>
       <button class="csv-btn" onclick="downloadCSV('blu')">📄 CSV Blue Express</button>
     </div>
     <button class="reset-btn" onclick="resetTool()">↺ Procesar otro archivo</button>
@@ -692,7 +694,34 @@ function processData({ headers, rows }, boletas = {}) {
     if (!guessKey) throw new Error('No se encontró la columna Shipping Method. Verifica que el CSV sea el correcto.');
   }
 
-  // ── FILTRO CRÍTICO: solo pedidos NO preparados ──
+  // ── FILTRO CRÍTICO 1: solo pedidos PAGADOS ──
+  // Shopify Financial Status: 'paid' = pagado · 'expired'/'pending'/'voided'/
+  // 'refunded' = NO pagado. Un pedido vencido (expired) no debe despacharse.
+  const kFinancial = findKey(headers,
+    'financial.*status', 'financial status',
+    'estado.*pago', 'payment.*status'
+  );
+  const totalOriginal = rows.length;
+  if (kFinancial) {
+    // Un order bump hereda el estado del pedido principal → agrupar por kName:
+    // si ALGUNA fila del pedido NO está pagada, se excluye el pedido completo.
+    const paidOrders = new Set();
+    const allOrders = new Set();
+    rows.forEach(r => {
+      const num = kName ? (r[kName] || '') : '';
+      const val = (r[kFinancial] || '').toLowerCase().trim();
+      allOrders.add(num);
+      if (val === 'paid' || val === 'pagado') paidOrders.add(num);
+      else paidOrders.delete(num); // una fila impaga descarta todo el pedido
+    });
+    rows = rows.filter(r => {
+      const num = kName ? (r[kName] || '') : '';
+      return paidOrders.has(num);
+    });
+  }
+  const filtradosPago = totalOriginal - rows.length;
+
+  // ── FILTRO CRÍTICO 2: solo pedidos NO preparados ──
   // Shopify: Fulfillment Status vacío = no preparado · "fulfilled" = ya preparado
   const kFulfill = findKey(headers,
     'fulfillment.*status', 'fulfillment status',
@@ -719,6 +748,7 @@ function processData({ headers, rows }, boletas = {}) {
     });
   }
   const filtrados = totalAntes - rows.length;
+  const filtradosTotal = filtradosPago + filtrados;
 
   // Step 1: resolve order bumps
   // For each email, find the first row that has a shipping method
@@ -751,7 +781,15 @@ function processData({ headers, rows }, boletas = {}) {
   const getStreet = r => getV(r, kStreet) || getV(r, kAddr1);
   const getAddr2  = r => getV(r, kAddr2);
   const getCity   = r => getV(r, kCity);
-  const getPhone  = r => getV(r, kPhone);
+  // Teléfono: quitar TODO lo no numérico (+, espacios, guiones, paréntesis)
+  // y normalizar a 9 dígitos quitando el prefijo país 56 si quedó pegado.
+  // '+56992011245' -> '992011245' · '948569441' -> '948569441'
+  const getPhone  = r => {
+    let p = getV(r, kPhone).replace(/\D/g, '');
+    if (p.length === 11 && p.startsWith('56')) p = p.slice(2);
+    else if (p.length === 10 && p.startsWith('0')) p = p.slice(1);
+    return p;
+  };
   const getEmail  = r => getV(r, kEmail);
   const getTotal  = r => getV(r, kTotal);
   // ID de Shopify: SIEMPRE string puro — nunca pasar por Number() o parseFloat()
@@ -794,8 +832,8 @@ function processData({ headers, rows }, boletas = {}) {
     'NOMBRE': getCustomerName(r),
     'TELÉFONO': getPhone(r),
     'CORREO ELECTRÓNICO': getEmail(r),
-    'DIRECCIÓN (solo calle y número)': getStreet(r),
-    'NÚMERO DE DEPTO/CASA Y COMENTARIO': getAddr2(r),
+    'DIRECCIÓN (Ingresar sólo la calle y el número)': getStreet(r),
+    'NÚMERO DE DEPTO/CASA Y COMENTARIO EN CASO DE HABER': getAddr2(r),
     'COMUNA': getCity(r),
     'VALUACIÓN': getTotal(r),
   }));
@@ -806,54 +844,76 @@ function processData({ headers, rows }, boletas = {}) {
     const num = getOrderNum(r);
     if (!stkByOrder.has(num)) stkByOrder.set(num, r); // keep first occurrence only
   });
-  const stkRows = Array.from(stkByOrder.values()).map(r => ({
-    'CODIGO AGENCIA DESTINO': '',
-    'RUT DESTINATARIO': '',
-    'DIGITO VERIFICADOR (DEL RUT)': '',
-    '*NOMBRE DESTINATARIO O RAZON SOCIAL': getCustomerName(r),
-    '*APELLIDO PATERNO': '.',
-    '*APELLIDO MATERNO': '.',
-    '*DIRECCION DESTINATARIO': getStreet(r),
-    '*NUMERO DIRECCION DESTINATARIO': '.',
-    'NUMERO DEPARTAMENTO': '.',
-    '*COMUNA DESTINATARIO': getCity(r),
-    'TELEFONO DESTINATARIO': getPhone(r),
-    'E-MAIL DESTINATARIO': getEmail(r),
-    'NOMBRE CONTACTO DESTINATARIO': '',
-    '*TIPO DE ENTREGA (1)AGENCIA (2)DOMICILIO': '2',
-    '*TIPO DE PAGO (2)CTA. CTE. (3)POR PAGAR': '2',
-    'NUMERO CTA. CTE.': '777615',
-    'DIGITO VERIFICADOR CTA. CTE.': '2',
-    'NUMERO CENTRO DE COSTO': '0',
-    '*VALOR DECLARADO': '50000',
-    '*CONTENIDO': 'SUPLEMENTOS',
-    '*CANTIDAD BULTOS': '1',
-    'CANTIDAD SOBRES': '',
-    '*KILOS': '0,3',
-    'TIPO SERVICIO (0)NORM (1)EXPR': '0',
-    'TIPO DOCUMENTO_1 (26)FACTURA (27)GUIA (28)BOLETA': '28',
-    'NUMERO DOCUMENTO_1': getBoleta(r),
-    'TIPO DOCUMENTO_2 (26)FACTURA (27)GUIA (28)BOLETA': '',
-    'NUMERO DOCUMENTO_2': '',
-    'TIPO DOCUMENTO_3 (26)FACTURA (27)GUIA (28)BOLETA': '',
-    'NUMERO DOC 3': '',
-    'TIPO DOCUMENTO_4 (26)FACTURA (27)GUIA (28)BOLETA': '',
-    'NUMERO DOCUMENTO_4': '',
-    'TIPO DOCUMENTO_5 (26)FACTURA (27)GUIA (28)BOLETA': '',
-    'NUMERO DOC 5': '',
-    'TIPO ENCARGO 1': '', 'CANTIDAD': '',
-    'TIPO ENCARGO 2': '', 'CANTIDAD.1': '',
-    'TIPO ENCARGO 3': '', 'CANTIDAD.2': '',
-    'TIPO ENCARGO 4': '', 'CANTIDAD.3': '',
-    'TIPO ENCARGO 5': '', 'CANTIDAD.4': '',
-    'LATITUD': '',
-    'LONGITUD': '',
-    'OBSERVACION': '',
-    'OBSERVACION_CLIENTE': 'PM' + getOrderNum(r),
-    'ANCHO(CM)': '15',
-    'ALTO(CM)': '10',
-    'LARGO(CM)': '5',
-  }));
+  // Encabezados EXACTOS del archivo oficial de Starken (51 columnas).
+  // OJO: 'CANTIDAD' se repite 5 veces — por eso se usa array, no objeto:
+  // un objeto JS no admite claves duplicadas y json_to_sheet las renombraba
+  // a CANTIDAD.1, CANTIDAD.2… lo que Starken rechaza.
+  const STK_HEADERS = [
+    'CODIGO AGENCIA DESTINO','RUT DESTINATARIO','DIGITO VERIFICADOR (DEL RUT)',
+    '*NOMBRE DESTINATARIO O RAZON SOCIAL','*APELLIDO PATERNO','*APELLIDO MATERNO',
+    '*DIRECCION DESTINATARIO','*NUMERO DIRECCION DESTINATARIO','NUMERO DEPARTAMENTO',
+    '*COMUNA DESTINATARIO',
+    // OJO: en el archivo oficial de Starken este encabezado viene con un byte
+    // corrupto (0x90) entre la L y la E: "TEL\x90EFONO". Es residuo de una
+    // conversión de codificación antigua. Se replica IDÉNTICO para no arriesgar
+    // que su sistema rechace la columna. Si algún día Starken lo corrige,
+    // cambiar por 'TELEFONO DESTINATARIO' a secas.
+    'TEL\u0090EFONO DESTINATARIO','E-MAIL DESTINATARIO',
+    'NOMBRE CONTACTO DESTINATARIO','*TIPO DE ENTREGA (1)AGENCIA (2)DOMICILIO',
+    '*TIPO DE PAGO (2)CTA. CTE. (3)POR PAGAR','NUMERO CTA. CTE.',
+    'DIGITO VERIFICADOR CTA. CTE.','NUMERO CENTRO DE COSTO','*VALOR DECLARADO',
+    '*CONTENIDO','*CANTIDAD BULTOS','CANTIDAD SOBRES','*KILOS',
+    'TIPO SERVICIO (0)NORM (1)EXPR',
+    'TIPO DOCUMENTO_1 (26)FACTURA (27)GUIA (28)BOLETA','NUMERO DOCUMENTO_1',
+    'TIPO DOCUMENTO_2 (26)FACTURA (27)GUIA (28)BOLETA','NUMERO DOCUMENTO_2',
+    'TIPO DOCUMENTO_3 (26)FACTURA (27)GUIA (28)BOLETA','NUMERO DOC 3',
+    'TIPO DOCUMENTO_4 (26)FACTURA (27)GUIA (28)BOLETA','NUMERO DOCUMENTO_4',
+    'TIPO DOCUMENTO_5 (26)FACTURA (27)GUIA (28)BOLETA','NUMERO DOC 5',
+    'TIPO ENCARGO 1','CANTIDAD','TIPO ENCARGO 2','CANTIDAD',
+    'TIPO ENCARGO 3','CANTIDAD','TIPO ENCARGO 4','CANTIDAD',
+    'TIPO ENCARGO 5','CANTIDAD','LATITUD','LONGITUD',
+    'OBSERVACION','OBSERVACION_CLIENTE','ANCHO(CM)','ALTO(CM)','LARGO(CM)'
+  ];
+
+  // Cada fila es un array de 51 posiciones, en el mismo orden que STK_HEADERS.
+  // Valores fijos copiados literalmente del archivo oficial 17-03-2026.
+  const stkRows = Array.from(stkByOrder.values()).map(r => ([
+    '',                       // 0  CODIGO AGENCIA DESTINO — se llena a mano cuando es agencia
+    '',                       // 1  RUT DESTINATARIO
+    '',                       // 2  DIGITO VERIFICADOR
+    getCustomerName(r),       // 3  NOMBRE DESTINATARIO
+    '.',                      // 4  APELLIDO PATERNO
+    '.',                      // 5  APELLIDO MATERNO
+    getStreet(r),             // 6  DIRECCION
+    '.',                      // 7  NUMERO DIRECCION
+    '.',                      // 8  NUMERO DEPARTAMENTO
+    getCity(r),               // 9  COMUNA
+    getPhone(r),              // 10 TELEFONO (9 dígitos, sin +56)
+    getEmail(r),              // 11 E-MAIL
+    '',                       // 12 NOMBRE CONTACTO
+    '2',                      // 13 TIPO ENTREGA — 2=domicilio (1=agencia se ajusta a mano)
+    '2',                      // 14 TIPO DE PAGO
+    '777615',                 // 15 NUMERO CTA. CTE.
+    '2',                      // 16 DIGITO VERIFICADOR CTA. CTE.
+    '0',                      // 17 NUMERO CENTRO DE COSTO
+    '50000',                  // 18 VALOR DECLARADO
+    'suplemento',             // 19 CONTENIDO — minúscula singular, igual al oficial
+    '1',                      // 20 CANTIDAD BULTOS
+    '',                       // 21 CANTIDAD SOBRES
+    '0,3',                    // 22 KILOS — coma decimal, igual al oficial
+    '0',                      // 23 TIPO SERVICIO
+    '28',                     // 24 TIPO DOCUMENTO_1 = boleta
+    getBoleta(r),             // 25 NUMERO DOCUMENTO_1 — N° de boleta (Lioren)
+    '', '', '', '', '', '', '', '', '',  // 26-34 docs 2-5 + TIPO ENCARGO 1
+    '', '', '', '', '', '', '', '', '',  // 35-43 CANTIDAD / TIPO ENCARGO 2-5
+    '',                       // 44 LATITUD
+    '',                       // 45 LONGITUD
+    '',                       // 46 OBSERVACION
+    getOrderNum(r),           // 47 OBSERVACION_CLIENTE — N° pedido SIN "#" ni "PM"
+    '15',                     // 48 ANCHO(CM)
+    '10',                     // 49 ALTO(CM)
+    '5'                       // 50 LARGO(CM)
+  ]));
 
   // ── BLUE EXPRESS — una fila por pedido (deduplicar order bumps) ──
   const bluByOrder = new Map();
@@ -964,7 +1024,7 @@ function processData({ headers, rows }, boletas = {}) {
     });
   });
 
-  return { tllRows, stkRows, stkResumenRows, tllResumenRows, bluRows, bluResumenRows, bumps, filtrados, total: rows.length };
+  return { STK_HEADERS, tllRows, stkRows, stkResumenRows, tllResumenRows, bluRows, bluResumenRows, bumps, filtrados, filtradosPago, total: rows.length };
 }
 
 // ── Show Results ──
@@ -976,9 +1036,12 @@ function showResults(result) {
   const counted = result.tllRows.length + result.stkRows.length + result.bluRows.length;
   document.getElementById('result-title').textContent =
     `${counted} pedido${counted !== 1 ? 's' : ''} procesado${counted !== 1 ? 's' : ''} correctamente`;
-  const filtradosTxt = result.filtrados > 0
-    ? ` · ${result.filtrados} omitido${result.filtrados!==1?'s':''} (ya preparados)`
-    : '';
+  const partes = [];
+  if (result.filtradosPago > 0)
+    partes.push(`${result.filtradosPago} sin pagar`);
+  if (result.filtrados > 0)
+    partes.push(`${result.filtrados} ya preparado${result.filtrados!==1?'s':''}`);
+  const filtradosTxt = partes.length ? ` · omitidos: ${partes.join(', ')}` : '';
   document.getElementById('result-sub').textContent =
     `${originalFilename} · ${new Date().toLocaleString('es-CL')}${filtradosTxt}`;
 
@@ -999,28 +1062,33 @@ function showResults(result) {
   }
 
   renderPreview('tll', result.tllRows);
-  renderPreview('stk', result.stkRows);
+  renderPreview('stk', result.stkRows, result.STK_HEADERS);
   renderPreview('blu', result.bluRows);
   renderPreview('rsm', result.stkResumenRows);
   renderPreview('rtll', result.tllResumenRows);
   renderPreview('rblu', result.bluResumenRows);
 }
 
-function renderPreview(id, rows) {
+function renderPreview(id, rows, headersOverride) {
   const el = document.getElementById('panel-' + id);
   if (!rows.length) {
     el.innerHTML = '<div class="empty-panel">Sin pedidos para este courier en el archivo cargado</div>';
     return;
   }
-  const hdrs = Object.keys(rows[0]);
+  // Soporta filas como objeto {col: val} o como array [val, val, ...].
+  // Starken usa arrays porque repite el encabezado 'CANTIDAD' 5 veces.
+  const isArrayRows = Array.isArray(rows[0]);
+  const hdrs = isArrayRows ? (headersOverride || rows[0].map((_, i) => 'C' + i))
+                           : Object.keys(rows[0]);
+  const cellOf = (r, h, i) => isArrayRows ? (r[i] ?? '') : (r[h] || '');
   const preview = rows.slice(0, 20);
   const isResumen = id === 'rsm' || id === 'rtll';
 
   const bodyRows = preview.map(r => {
-    const isEmpty = hdrs.every(h => !r[h]);
+    const isEmpty = hdrs.every((h, i) => !cellOf(r, h, i));
     const rowStyle = isEmpty ? 'background:rgba(255,255,255,.04);' : '';
-    const cells = hdrs.map(h => {
-      const val = escHTML(r[h] || '');
+    const cells = hdrs.map((h, i) => {
+      const val = escHTML(cellOf(r, h, i));
       const isFirst = (h === 'N° PEDIDO (PM)' || h === 'NOMBRE') && val;
       const cellStyle = isFirst ? 'font-weight:700;color:var(--accent2);' : '';
       return `<td style="${cellStyle}" title="${val}">${isEmpty ? '' : val}</td>`;
@@ -1049,119 +1117,194 @@ function showTab(id) {
 }
 
 // ── Download Excel ──
-function downloadExcel() {
-  if (!processedData) return;
-  const { tllRows, stkRows, stkResumenRows, tllResumenRows, bluRows, bluResumenRows } = processedData;
-  const wb = XLSX.utils.book_new();
+// ── Descargar ZIP con los 6 archivos CSV ──
+// Formato copiado del archivo oficial de Starken 17-03-2026:
+//   separador ';' · decimal con coma · codificación Latin-1 (ANSI) · saltos CRLF
+// Latin-1 es imprescindible: con UTF-8 los acentos salen corruptos al subir a Starken.
 
-  // Plain sheet — pure json_to_sheet, NO style objects anywhere (Excel 2019 safe)
-  function addSheet(rows, name, colW) {
-    const data = rows.length ? rows : [{}];
-    const ws = XLSX.utils.json_to_sheet(data);
-    if (ws['!ref']) {
-      const range = XLSX.utils.decode_range(ws['!ref']);
-      ws['!cols'] = Array.from({length: range.e.c - range.s.c + 1}, () => ({ wch: colW || 24 }));
-    }
-    XLSX.utils.book_append_sheet(wb, ws, name);
+// Convierte texto a bytes Latin-1. Los caracteres fuera del rango (ej. emojis)
+// se reemplazan por '?' en vez de romper el archivo.
+function toLatin1Bytes(str) {
+  const out = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    out[i] = c <= 0xFF ? c : 0x3F; // 0x3F = '?'
   }
-
-  // Resumen sheet — builds cells manually but keeps styles minimal and consistent
-  // All cells get s:{} to avoid the "mixed styled/unstyled" bug in Excel 2019
-  function addResumenSheet(rows, name, colKeys, colWidths) {
-    if (!rows.length) { addSheet([], name); return; }
-    const ws = {};
-
-    // Header row
-    colKeys.forEach((k, ci) => {
-      ws[XLSX.utils.encode_cell({ r: 0, c: ci })] = {
-        v: k, t: 's',
-        s: {
-          font: { bold: true, color: { rgb: 'FFFFFF' } },
-          fill: { fgColor: { rgb: '2F5496' }, patternType: 'solid' },
-          border: { bottom: { style: 'medium', color: { rgb: '1F3864' } } }
-        }
-      };
-    });
-
-    let ri = 1;
-    rows.forEach((row, rowIdx) => {
-      const nextRow = rows[rowIdx + 1];
-      const isLastOfGroup = !nextRow || !!nextRow[colKeys[0]];
-
-      colKeys.forEach((k, ci) => {
-        const val = row[k] || '';
-        const isPMcol = k === 'N° PEDIDO (PM)' && val;
-        // Every cell gets a style object — mixing styled/unstyled crashes Excel 2019
-        const s = {
-          font: isPMcol ? { bold: true, color: { rgb: '1F4E79' } } : {},
-          border: isLastOfGroup
-            ? { bottom: { style: 'thick', color: { rgb: '000000' } } }
-            : {}
-        };
-        ws[XLSX.utils.encode_cell({ r: ri, c: ci })] = { v: val, t: 's', s };
-      });
-      ri++;
-    });
-
-    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: ri - 1, c: colKeys.length - 1 } });
-    ws['!cols'] = colWidths.map(w => ({ wch: w }));
-    XLSX.utils.book_append_sheet(wb, ws, name);
-  }
-
-  addSheet(tllRows, 'Te lo Llevo',  24);
-  addSheet(stkRows, 'Starken',       22);
-  addSheet(bluRows, 'Blue Express',  24);
-
-  addResumenSheet(
-    stkResumenRows,
-    'Resumen Starken',
-    ['N° PEDIDO (PM)', 'NOMBRE', 'COMUNA', 'PRODUCTOS'],
-    [18, 28, 22, 45]
-  );
-
-  addResumenSheet(
-    tllResumenRows,
-    'Resumen Te lo Llevo',
-    ['N° PEDIDO (PM)', 'NOMBRE', 'DIRECCIÓN', 'TELÉFONO', 'PRODUCTOS'],
-    [18, 28, 45, 16, 45]
-  );
-
-  addResumenSheet(
-    bluResumenRows,
-    'Resumen Blue Express',
-    ['N° PEDIDO', 'NOMBRE', 'COMUNA', 'PRODUCTOS'],
-    [18, 28, 22, 45]
-  );
-
-  const date = new Date().toISOString().split('T')[0];
-  XLSX.writeFile(wb, `ereboost_pedidos_${date}.xlsx`);
+  return out;
 }
 
-// ── Download CSV (Excel 2019 fallback) ──
+// Arma el CSV. Starken NO usa comillas, ni siquiera en direcciones con coma,
+// porque el separador es ';'. Por seguridad se limpian ';' y saltos de línea
+// que pudieran venir dentro de un dato.
+function buildCSV(headers, rows) {
+  const clean = v => String(v ?? '').replace(/[;\r\n]+/g, ' ').trim();
+  const lines = [headers.map(clean).join(';')];
+  rows.forEach(r => {
+    const arr = Array.isArray(r) ? r : headers.map(h => r[h]);
+    lines.push(arr.map(clean).join(';'));
+  });
+  return lines.join('\r\n') + '\r\n'; // el archivo oficial termina en CRLF
+}
+
+// Construye el XLSX de Te lo Llevo (courier) para subir directo a su plataforma.
+// Réplica de la plantilla oficial: TELÉFONO y VALUACIÓN como número real,
+// el resto como texto. Sin formato especial (hoja simple).
+async function buildTeLoLlevoXLSX(headers, rows) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Hoja1');
+  // Columnas numéricas según la plantilla oficial
+  const numCols = new Set(['TELÉFONO', 'VALUACIÓN']);
+
+  ws.addRow(headers);
+  rows.forEach(r => {
+    const vals = headers.map(h => {
+      const v = r[h] ?? '';
+      if (numCols.has(h)) {
+        const n = parseInt(String(v).replace(/\D/g, ''), 10);
+        return Number.isFinite(n) ? n : '';   // número real, no texto
+      }
+      return v;
+    });
+    ws.addRow(vals);
+  });
+
+  return await wb.xlsx.writeBuffer();
+}
+
+
+// anchos de columna exactos, alto de fila fijo, y una línea negra bajo la
+// última fila de cada PM (agrupando order bumps bajo el mismo pedido).
+// SheetJS gratuito NO dibuja bordes; por eso los resúmenes usan ExcelJS.
+// Devuelve un ArrayBuffer listo para meter al ZIP.
+async function buildResumenXLSX(headers, rows, keyPM, colWidths, rowHeight, fitToPage) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Resumen', fitToPage ? {
+    pageSetup: {
+      orientation: 'portrait',
+      fitToPage: true,
+      fitToWidth: 1,   // forzar todo el ancho en 1 página
+      fitToHeight: 0,  // alto libre (puede usar varias páginas hacia abajo)
+      margins: { left: 0.7, right: 0.7, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 },
+    }
+  } : undefined);
+
+  ws.columns = colWidths.map(w => ({ width: w }));
+
+  // Fila de encabezado (en negrita)
+  const head = ws.addRow(headers);
+  head.font = { bold: true };
+  head.height = rowHeight;
+  head.eachCell({ includeEmpty: true }, c => {
+    c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+  });
+
+  // Filas de datos
+  rows.forEach(r => {
+    const row = ws.addRow(headers.map(h => r[h] ?? ''));
+    row.height = rowHeight;
+    row.eachCell({ includeEmpty: true }, c => {
+      c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    });
+  });
+
+  // Línea negra al final de cada grupo PM. Un grupo empieza donde keyPM trae
+  // valor; la última fila del grupo es la anterior al siguiente PM (o la última).
+  const isGroupStart = i => String(rows[i]?.[keyPM] ?? '') !== '';
+  rows.forEach((_, i) => {
+    const isLast = i === rows.length - 1 || isGroupStart(i + 1);
+    if (!isLast) return;
+    const excelRow = ws.getRow(i + 2); // +1 header, +1 base-1
+    excelRow.eachCell({ includeEmpty: true }, c => {
+      c.border = { ...(c.border || {}), bottom: { style: 'medium', color: { argb: 'FF000000' } } };
+    });
+  });
+
+  return await wb.xlsx.writeBuffer();
+}
+
+async function downloadZIP() {
+  if (!processedData) return;
+  const {
+    STK_HEADERS, tllRows, stkRows, bluRows,
+    stkResumenRows, tllResumenRows, bluResumenRows
+  } = processedData;
+
+  const hdrsOf = rows => rows.length ? Object.keys(rows[0]) : [];
+  const date = new Date().toISOString().split('T')[0];
+  const zip = new JSZip();
+
+  // ── 2 archivos de courier → CSV ──
+  // Starken: formato oficial (Latin-1, ';', byte corrupto en TELEFONO).
+  // Blue Express: mismo formato CSV.
+  // Te lo Llevo NO va aquí: se sube como XLSX a su plataforma (abajo).
+  const csvFiles = [
+    { nombre: 'Starken',      headers: STK_HEADERS,     rows: stkRows },
+    { nombre: 'Blue_Express', headers: hdrsOf(bluRows), rows: bluRows },
+  ];
+  csvFiles.forEach(a => {
+    if (!a.headers.length) return;
+    zip.file(`${a.nombre}_${date}.csv`, toLatin1Bytes(buildCSV(a.headers, a.rows)));
+  });
+
+  // ── Te lo Llevo (courier) → XLSX para subir a su plataforma ──
+  if (tllRows.length) {
+    const buf = await buildTeLoLlevoXLSX(hdrsOf(tllRows), tllRows);
+    zip.file(`Te_lo_Llevo_${date}.xlsx`, buf);
+  }
+
+  // ── 3 resúmenes → XLSX con formato ──
+  // Resumen Te lo Llevo: anchos reducidos para caber en 1 hoja Carta vertical
+  // al imprimir (los originales 8.7/12.8/32.2/12.2/45.1 sumaban 21cm y se
+  // desbordaban a una 2ª página). Ahora suman ~17cm < 17.77cm útiles.
+  if (tllResumenRows.length) {
+    const buf = await buildResumenXLSX(
+      hdrsOf(tllResumenRows), tllResumenRows, 'N° PEDIDO (PM)',
+      [7, 11, 26, 10, 34], 50, true   // fitToPage = true
+    );
+    zip.file(`Resumen_Te_lo_Llevo_${date}.xlsx`, buf);
+  }
+
+  // Resumen Blue Express: anchos A=8.9 B=20.1 C=8.1 D=45.1 · alto 50
+  if (bluResumenRows.length) {
+    const buf = await buildResumenXLSX(
+      hdrsOf(bluResumenRows), bluResumenRows, 'N° PEDIDO',
+      [8.9, 20.1, 8.1, 45.1], 50
+    );
+    zip.file(`Resumen_Blue_Express_${date}.xlsx`, buf);
+  }
+
+  // Resumen Starken: anchos A=9.7 B=15.3 C=16.2 D=36.4 · alto 50
+  if (stkResumenRows.length) {
+    const buf = await buildResumenXLSX(
+      hdrsOf(stkResumenRows), stkResumenRows, 'N° PEDIDO (PM)',
+      [9.7, 15.3, 16.2, 36.4], 50
+    );
+    zip.file(`Resumen_Starken_${date}.xlsx`, buf);
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ereboost_pedidos_${date}.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Descarga individual de un CSV ──
+// Usa exactamente el mismo formato que el ZIP: ';' + Latin-1 + CRLF
 function downloadCSV(type) {
   if (!processedData) return;
   const map = {
-    tll: { rows: processedData.tllRows, name: 'Te_lo_Llevo' },
-    stk: { rows: processedData.stkRows, name: 'Starken' },
-    blu: { rows: processedData.bluRows, name: 'Blue_Express' },
+    stk: { rows: processedData.stkRows, name: 'Starken', headers: processedData.STK_HEADERS },
+    blu: { rows: processedData.bluRows, name: 'Blue_Express', headers: null },
   };
-  const { rows, name } = map[type];
+  const { rows, name, headers } = map[type];
   if (!rows.length) { alert('Sin pedidos para este courier.'); return; }
 
-  const headers = Object.keys(rows[0]);
-  const escape = v => {
-    const s = String(v ?? '');
-    return s.includes(',') || s.includes('"') || s.includes('\n')
-      ? '"' + s.replace(/"/g, '""') + '"'
-      : s;
-  };
-  const csv = [
-    headers.map(escape).join(','),
-    ...rows.map(r => headers.map(h => escape(r[h] ?? '')).join(','))
-  ].join('\r\n');
-
-  const bom = '\uFEFF'; // BOM para que Excel 2019 abra con tildes correctas
-  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+  const hdrs = headers || Object.keys(rows[0]);
+  const csv = buildCSV(hdrs, rows);
+  const blob = new Blob([toLatin1Bytes(csv)], { type: 'text/csv;charset=iso-8859-1;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const date = new Date().toISOString().split('T')[0];
@@ -1170,6 +1313,24 @@ function downloadCSV(type) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// Descarga individual del XLSX de Te lo Llevo (courier)
+async function downloadTllXlsx() {
+  if (!processedData || !processedData.tllRows.length) {
+    alert('Sin pedidos de Te lo Llevo.'); return;
+  }
+  const headers = Object.keys(processedData.tllRows[0]);
+  const buf = await buildTeLoLlevoXLSX(headers, processedData.tllRows);
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const date = new Date().toISOString().split('T')[0];
+  a.href = url;
+  a.download = `ereboost_Te_lo_Llevo_${date}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function resetTool() {
   processedData = null;
   originalFilename = '';
