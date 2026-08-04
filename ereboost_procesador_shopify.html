@@ -1216,7 +1216,9 @@ async function geocode(direccion, comuna, apiKey) {
   const resp = await fetch(url);
   const data = await resp.json();
   if (data.status !== 'OK' || !data.results.length) {
-    return { encontrada: false, status: data.status };
+    // status puede ser: ZERO_RESULTS (no encontró), REQUEST_DENIED (key mal
+    // configurada), OVER_QUERY_LIMIT (sin cuota), INVALID_REQUEST, etc.
+    return { encontrada: false, status: data.status, errorMsg: data.error_message || '' };
   }
   const res = data.results[0];
   // Extraer comuna: en Chile Google la marca como 'locality' o 'administrative_area_level_3'
@@ -1307,7 +1309,16 @@ async function validarDirecciones() {
 
     if (!geo.encontrada) {
       estado = 'err'; badge = 'No encontrada';
-      nota = 'Google no la ubicó — revisar a mano';
+      // Mostrar el motivo REAL de Google, no un genérico.
+      if (geo.status === 'ZERO_RESULTS') {
+        nota = 'Google no la ubicó — revisar a mano';
+      } else if (geo.status === 'REQUEST_DENIED') {
+        nota = 'API key rechazada: ' + (geo.errorMsg || 'revisar configuración de la key');
+      } else if (geo.status === 'OVER_QUERY_LIMIT') {
+        nota = 'Sin cuota disponible en Google';
+      } else {
+        nota = `Error de Google: ${geo.status}${geo.errorMsg ? ' — ' + geo.errorMsg : ''}`;
+      }
     } else {
       const comunaDistinta = normComuna(geo.comunaReal) !== normComuna(o.comuna) && geo.comunaReal;
       if (comunaDistinta && geo.precisa) {
@@ -1329,8 +1340,17 @@ async function validarDirecciones() {
       }
     }
 
-    filas.push({ o, estado, badge, nota, formatted: geo.formatted || '' });
+    filas.push({ o, estado, badge, nota, formatted: geo.formatted || '', status: geo.status });
   }
+
+  // ¿Todas fallaron con el MISMO error de configuración? Entonces no es problema
+  // de las direcciones sino de la API key. Avisar claramente.
+  const errores = filas.filter(f => f.estado === 'err');
+  const configError = errores.find(f => f.status === 'REQUEST_DENIED' || f.status === 'OVER_QUERY_LIMIT');
+  if (configError && errores.length === filas.length) {
+    status.innerHTML = `<span style="color:var(--pink);">⚠️ Google está rechazando TODAS las consultas (${configError.status}). No es problema de las direcciones sino de la configuración de la API key. Revisa el detalle abajo.</span>`;
+    info.textContent = `${aRevisar.length} revisadas`;
+  } else {
 
   // Ordenar: errores y warnings primero (lo que necesita atención)
   const orden = { err: 0, warn: 1, fix: 2 };
@@ -1338,6 +1358,7 @@ async function validarDirecciones() {
 
   status.textContent = `✅ Listo. ${corregidas} comuna(s) corregida(s) automáticamente. Revisa las marcadas en amarillo/rojo.`;
   info.textContent = `${aRevisar.length} revisadas`;
+  }
 
   const courierNombre = { stk: 'Starken', tll: 'Te lo Llevo', blu: 'Blue Express' };
   result.innerHTML = `
