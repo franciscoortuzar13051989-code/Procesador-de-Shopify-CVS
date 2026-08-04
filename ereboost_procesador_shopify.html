@@ -240,6 +240,48 @@ tbody tr { border-bottom: 1px solid rgba(255,255,255,.04); }
 tbody tr:hover { background: rgba(255,255,255,.025); }
 tbody td { padding: 8px 12px; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
 
+/* VALIDADOR DIRECCIONES */
+.validador {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.validador-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-weight: 600; font-size: 14px; margin-bottom: 12px;
+}
+.validador-info { color: var(--muted); font-size: 12px; font-weight: 400; }
+.gmaps-input {
+  width: 100%; padding: 10px 12px; margin-bottom: 10px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-size: 13px;
+  font-family: 'DM Mono', monospace;
+}
+.gmaps-input:focus { outline: none; border-color: var(--accent); }
+.val-btn {
+  width: 100%; padding: 12px; background: var(--card);
+  border: 1px solid var(--accent); border-radius: 8px;
+  color: var(--accent); font-weight: 600; font-size: 13px; cursor: pointer;
+}
+.val-btn:hover:not(:disabled) { background: var(--accent); color: #fff; }
+.val-btn:disabled { opacity: .5; cursor: not-allowed; }
+.val-status { font-size: 13px; color: var(--muted); margin-top: 10px; text-align: center; }
+.val-result { margin-top: 12px; }
+.val-result table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.val-result th, .val-result td {
+  padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border);
+}
+.val-result th { color: var(--muted); font-weight: 600; }
+.val-row-fix { background: rgba(79,224,160,.08); }
+.val-row-warn { background: rgba(245,200,74,.08); }
+.val-row-err { background: rgba(245,91,138,.10); }
+.val-badge { padding: 2px 7px; border-radius: 5px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.val-badge.fix { background: rgba(79,224,160,.2); color: var(--green); }
+.val-badge.warn { background: rgba(245,200,74,.2); color: var(--yellow); }
+.val-badge.err { background: rgba(245,91,138,.2); color: var(--pink); }
+
 /* DOWNLOAD BTN */
 .download-btn {
   width: 100%;
@@ -408,6 +450,23 @@ tbody td { padding: 8px 12px; white-space: nowrap; max-width: 180px; overflow: h
       <div class="prev-panel" id="panel-rsm"></div>
       <div class="prev-panel" id="panel-rtll"></div>
       <div class="prev-panel" id="panel-rblu"></div>
+    </div>
+
+    <!-- VALIDADOR DE DIRECCIONES (Google Maps) -->
+    <div class="validador" id="validador-box">
+      <div class="validador-head">
+        <span>📍 Validar direcciones con Google Maps</span>
+        <span class="validador-info" id="val-info"></span>
+      </div>
+      <div class="validador-body">
+        <input type="password" id="gmaps-key" class="gmaps-input"
+               placeholder="Pega tu API key de Google Maps una sola vez (queda guardada en este navegador)" />
+        <button class="val-btn" id="val-btn" onclick="validarDirecciones()">
+          Validar direcciones de Santiago y sin número
+        </button>
+        <div id="val-status" class="val-status"></div>
+        <div id="val-result" class="val-result"></div>
+      </div>
     </div>
 
     <button class="download-btn" onclick="downloadZIP()">
@@ -1067,6 +1126,7 @@ function showResults(result) {
   renderPreview('rsm', result.stkResumenRows);
   renderPreview('rtll', result.tllResumenRows);
   renderPreview('rblu', result.bluResumenRows);
+  loadApiKey();
 }
 
 function renderPreview(id, rows, headersOverride) {
@@ -1117,7 +1177,208 @@ function showTab(id) {
 }
 
 // ── Download Excel ──
-// ── Descargar ZIP con los 6 archivos CSV ──
+// ═══════════════════════════════════════════════════════════════
+//  VALIDADOR DE DIRECCIONES con Google Maps Geocoding API
+//  Valida direcciones que dicen "Santiago" o que no tienen número.
+//  Corrige la comuna automáticamente SOLO cuando Google la ubica con
+//  alta precisión (ROOFTOP / precisión de calle). El resto queda para
+//  revisión manual. Nunca inventa datos.
+// ═══════════════════════════════════════════════════════════════
+
+// ¿La dirección tiene un número de calle real? '0' cuenta como SIN número.
+function tieneNumeroCalle(dir) {
+  const nums = String(dir).match(/\d+/g);
+  if (!nums) return false;
+  return nums.some(n => parseInt(n, 10) > 0);
+}
+
+// Guardar/leer API key en el navegador (no en el código público).
+function getApiKey() {
+  const k = document.getElementById('gmaps-key').value.trim();
+  if (k) { try { localStorage.setItem('ereboost_gmaps_key', k); } catch(e){} }
+  return k;
+}
+function loadApiKey() {
+  try {
+    const k = localStorage.getItem('ereboost_gmaps_key');
+    if (k) {
+      document.getElementById('gmaps-key').value = k;
+      const info = document.getElementById('val-info');
+      if (info) info.textContent = '🔑 API key guardada en este navegador';
+    }
+  } catch(e){}
+}
+
+// Consulta una dirección a Google. Devuelve {comuna, precisa, encontrada, formatted}.
+async function geocode(direccion, comuna, apiKey) {
+  const query = `${direccion}, ${comuna}, Chile`;
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&region=cl&key=${apiKey}`;
+  const resp = await fetch(url);
+  const data = await resp.json();
+  if (data.status !== 'OK' || !data.results.length) {
+    return { encontrada: false, status: data.status };
+  }
+  const res = data.results[0];
+  // Extraer comuna: en Chile Google la marca como 'locality' o 'administrative_area_level_3'
+  let comunaReal = '';
+  for (const comp of res.address_components) {
+    if (comp.types.includes('locality') || comp.types.includes('administrative_area_level_3')) {
+      comunaReal = comp.long_name; break;
+    }
+  }
+  // Precisión: ROOFTOP = exacto a nivel de dirección. RANGE_INTERPOLATED también es bueno.
+  const loc = res.geometry.location_type;
+  const precisa = (loc === 'ROOFTOP' || loc === 'RANGE_INTERPOLATED');
+  return {
+    encontrada: true,
+    comunaReal,
+    precisa,
+    formatted: res.formatted_address,
+    locationType: loc,
+  };
+}
+
+// Normaliza para comparar comunas ignorando tildes/mayúsculas.
+function normComuna(s) {
+  return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+
+async function validarDirecciones() {
+  if (!processedData) return;
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    document.getElementById('val-status').textContent = '⚠️ Pega primero tu API key de Google Maps.';
+    return;
+  }
+
+  // Reunir TODAS las filas courier con su dirección/comuna, sin duplicar por pedido.
+  // Trabajamos sobre las filas ya procesadas (Starken como array, TLL/Blue como objeto).
+  const objetivos = [];
+  const stkH = processedData.STK_HEADERS;
+  const iDir = stkH.indexOf('*DIRECCION DESTINATARIO');
+  const iCom = stkH.indexOf('*COMUNA DESTINATARIO');
+  processedData.stkRows.forEach((r, idx) => {
+    objetivos.push({ courier: 'stk', idx, dir: r[iDir], comuna: r[iCom] });
+  });
+  processedData.tllRows.forEach((r, idx) => {
+    objetivos.push({ courier: 'tll', idx, dir: r['DIRECCIÓN (Ingresar sólo la calle y el número)'], comuna: r['COMUNA'] });
+  });
+  processedData.bluRows.forEach((r, idx) => {
+    const dirKey = Object.keys(r).find(k => k.toUpperCase().includes('DIREC'));
+    const comKey = Object.keys(r).find(k => k.toUpperCase().includes('COMUNA'));
+    objetivos.push({ courier: 'blu', idx, dir: r[dirKey], comuna: r[comKey], dirKey, comKey });
+  });
+
+  // Filtrar: solo las que dicen "Santiago" o no tienen número
+  const aRevisar = objetivos.filter(o => {
+    const esSantiago = normComuna(o.comuna) === 'santiago';
+    const sinNumero = !tieneNumeroCalle(o.dir);
+    return esSantiago || sinNumero;
+  });
+
+  const info = document.getElementById('val-info');
+  const status = document.getElementById('val-status');
+  const result = document.getElementById('val-result');
+  const btn = document.getElementById('val-btn');
+
+  if (!aRevisar.length) {
+    status.textContent = '✅ Ninguna dirección necesita revisión (no hay "Santiago" ni direcciones sin número).';
+    result.innerHTML = '';
+    return;
+  }
+
+  btn.disabled = true;
+  result.innerHTML = '';
+  const filas = [];
+  let corregidas = 0;
+
+  for (let i = 0; i < aRevisar.length; i++) {
+    const o = aRevisar[i];
+    status.textContent = `Consultando ${i + 1} de ${aRevisar.length}…`;
+    let geo;
+    try {
+      geo = await geocode(o.dir, o.comuna, apiKey);
+    } catch (e) {
+      geo = { encontrada: false, status: 'ERROR_RED' };
+    }
+
+    const sinNumero = !tieneNumeroCalle(o.dir);
+    let estado, badge, nuevaComuna = '', nota = '';
+
+    if (!geo.encontrada) {
+      estado = 'err'; badge = 'No encontrada';
+      nota = 'Google no la ubicó — revisar a mano';
+    } else {
+      const comunaDistinta = normComuna(geo.comunaReal) !== normComuna(o.comuna) && geo.comunaReal;
+      if (comunaDistinta && geo.precisa) {
+        // Corrección automática segura
+        estado = 'fix'; badge = 'Comuna corregida';
+        nuevaComuna = geo.comunaReal;
+        nota = `${o.comuna} → ${geo.comunaReal}`;
+        aplicarCorreccion(o, geo.comunaReal);
+        corregidas++;
+      } else if (comunaDistinta && !geo.precisa) {
+        estado = 'warn'; badge = 'Revisar comuna';
+        nota = `Google sugiere ${geo.comunaReal} pero sin precisión — revisar`;
+      } else if (sinNumero) {
+        estado = 'warn'; badge = 'Sin número';
+        nota = geo.precisa ? 'Comuna OK, pero falta número de calle' : 'Falta número — revisar';
+      } else {
+        estado = 'fix'; badge = 'OK';
+        nota = 'Comuna confirmada';
+      }
+    }
+
+    filas.push({ o, estado, badge, nota, formatted: geo.formatted || '' });
+  }
+
+  // Ordenar: errores y warnings primero (lo que necesita atención)
+  const orden = { err: 0, warn: 1, fix: 2 };
+  filas.sort((a, b) => orden[a.estado] - orden[b.estado]);
+
+  status.textContent = `✅ Listo. ${corregidas} comuna(s) corregida(s) automáticamente. Revisa las marcadas en amarillo/rojo.`;
+  info.textContent = `${aRevisar.length} revisadas`;
+
+  const courierNombre = { stk: 'Starken', tll: 'Te lo Llevo', blu: 'Blue Express' };
+  result.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Estado</th><th>Courier</th><th>Dirección</th><th>Detalle</th>
+      </tr></thead>
+      <tbody>
+        ${filas.map(f => `
+          <tr class="val-row-${f.estado}">
+            <td><span class="val-badge ${f.estado}">${f.badge}</span></td>
+            <td>${courierNombre[f.o.courier]}</td>
+            <td title="${escHTML(f.formatted)}">${escHTML(f.o.dir)}<br><span style="color:var(--muted);font-size:11px;">Comuna: ${escHTML(f.o.comuna)}</span></td>
+            <td>${escHTML(f.nota)}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    <div style="margin-top:8px;font-size:11px;color:var(--muted);">
+      Las comunas corregidas ya están aplicadas — descarga el ZIP para obtenerlas actualizadas.
+    </div>`;
+
+  btn.disabled = false;
+  // Refrescar la vista previa para que se vean las comunas corregidas
+  renderPreview('stk', processedData.stkRows, processedData.STK_HEADERS);
+  renderPreview('tll', processedData.tllRows);
+  renderPreview('blu', processedData.bluRows);
+}
+
+// Aplica la comuna corregida a la fila correspondiente (y a los resúmenes).
+function aplicarCorreccion(o, nuevaComuna) {
+  if (o.courier === 'stk') {
+    const iCom = processedData.STK_HEADERS.indexOf('*COMUNA DESTINATARIO');
+    processedData.stkRows[o.idx][iCom] = nuevaComuna;
+  } else if (o.courier === 'tll') {
+    processedData.tllRows[o.idx]['COMUNA'] = nuevaComuna;
+  } else if (o.courier === 'blu') {
+    processedData.bluRows[o.idx][o.comKey] = nuevaComuna;
+  }
+}
+
+
 // Formato copiado del archivo oficial de Starken 17-03-2026:
 //   separador ';' · decimal con coma · codificación Latin-1 (ANSI) · saltos CRLF
 // Latin-1 es imprescindible: con UTF-8 los acentos salen corruptos al subir a Starken.
