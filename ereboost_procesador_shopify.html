@@ -469,6 +469,21 @@ tbody td { padding: 8px 12px; white-space: nowrap; max-width: 180px; overflow: h
       </div>
     </div>
 
+    <!-- VALIDADOR DE COMUNAS Y SUCURSALES (sin internet) -->
+    <div class="validador" id="validador-local-box">
+      <div class="validador-head">
+        <span>🏢 Validar comunas y sucursales (Starken)</span>
+        <span class="validador-info">Sin internet · datos Dic24</span>
+      </div>
+      <div class="validador-body">
+        <button class="val-btn" onclick="validarComunasYSucursales()">
+          Corregir comunas mal escritas y asignar sucursales
+        </button>
+        <div id="vloc-status" class="val-status"></div>
+        <div id="vloc-result" class="val-result"></div>
+      </div>
+    </div>
+
     <button class="download-btn" onclick="downloadZIP()">
       ⬇ &nbsp;Descargar ZIP con 6 archivos CSV
     </button>
@@ -525,6 +540,18 @@ tbody td { padding: 8px 12px; white-space: nowrap; max-width: 180px; overflow: h
 </div>
 
 <script>
+// Datos de referencia embebidos (extraídos de Tarifa Smart y Puntos Starken Dic24)
+// 726 comunas oficiales + 255 sucursales activas con entrega en PV.
+const COMUNAS_OFICIALES = ["ACHAO", "AGUA BUENA", "AHUI", "AIQUINA", "ALERCE", "ALGARROBAL", "ALGARROBITO", "ALGARROBO", "ALHUE", "ALICAHUE", "ALTO BIO BIO", "ALTO DEL CARMEN", "ALTO EL CANELO", "ALTO HOSPICIO", "ALTO JAHUEL", "ALTOVALSOL", "ANCUAQUE", "ANCUD", "ANDACOLLO", "ANGOL", "ANTIHUALA", "ANTOFAGASTA", "ANTUCO", "ARAUCO", "ARICA", "ARTIFICIO", "BAHIA INGLESA", "BAHIA MANSA", "BAHIA MURTA", "BALMACEDA", "BAQUEDANO", "BARROS ARANA", "BATUCO (RM)", "BATUCO (TALCA)", "BELEN", "BELLOTO", "BOBADILLA", "BOCO DE QUILLOTA", "BOLLENAR", "BUCALEMU", "BUCHUPUREO", "BUIN", "BULNES", "CABILDO", "CABRERO", "CABURGA", "CACHAGUA", "CAHUIL", "CAIMANES", "CAJON", "CAJON DEL MAIPO", "CALAFQUEN", "CALAMA", "CALBUCO", "CALDERA", "CALERA DE TANGO", "CALETA ANDRADE", "CALETA BUENA", "CALETA GONZALO", "CALETONES", "CALLE LARGA", "CAMARICO", "CAMARONES", "CAMERON", "CAMINA", "CAMPANARIO", "CANCOSA", "CANELA", "CANETE", "CANTO DE AGUA", "CAPITAN PASTENE", "CAQUENA", "CARAHUE", "CARAMPANGUE", "CARELMAPU", "CAREN", "CARIQUIMA", "CARRIZAL BAJO", "CARTAGENA", "CASABLANCA", "CASMA", "CASPANA", "CASTRO", "CATAPILCO", "CATEMU", "CAULIN", "CAUQUENES", "CAYUCUPIL", "CERRILLOS DE TAMAYA", "CERRO ALTO", "CERRO SOMBRERO", "CHACAO", "CHAICA", "CHAITEN", "CHAMPA", "CHANARAL", "CHANARAL ALTO", "CHANARAL DE CAREN", "CHANCO", "CHARRUA", "CHAUQUEN", "CHECURA", "CHEPICA", "CHEPU", "CHERQUENCO", "CHICUREO", "CHIGUAYANTE", "CHILCAS", "CHILE CHICO", "CHILLAN", "CHILLEPIN", "CHIMBARONGO", "CHOCALAN", "CHOLCHOL", "CHOLGUAN", "CHONCHI", "CHOROICO", "CHOSHUENCO", "CIRUELOS", "CIUDAD DE LOS VALLES", "COBIJA", "COBQUECURA", "COCHAMO", "COCHRANE", "CODEGUA", "CODIGUA", "CODPA", "COELEMU", "COIHUE", "COIHUECO", "COINCO", "COLBUN", "COLCHANE", "COLCURA", "COLICO", "COLINA", "COLIUMO", "COLLACAGUA", "COLLIPULLI", "COLONIA MENDOZA", "COLTAUCO", "COMBARBALA", "CONARIPE", "CONAY", "CONCEPCION", "CONCON", "CONSTITUCION", "CONTULMO", "COPIAPO", "COPIULEMU", "COQUIMBO", "CORONEL", "CORRAL", "COSAPILLA", "COYA", "COYHAIQUE", "COZ COZ", "CULENAR", "CULIPRAN", "CUMPEO", "CUNACO", "CUNCO", "CUNCUMEN", "CURACALCO", "CURACAUTIN", "CURACAVI", "CURACO DE VELEZ", "CURANILAHUE", "CURANIPE", "CURARREHUE", "CURAUMA", "CUREPTO", "CURICO", "CURIMON", "CURINANCO", "CUYA", "DALCAHUE", "DEGAN", "DICHATO", "DIEGO DE ALMAGRO", "DOMEYKO", "DONIHUE", "DUAO", "EL CANELO", "EL CARMEN CHILLAN", "EL CARMEN RENGO", "EL COLORADO", "EL HINOJAL", "EL INGENIO", "EL MANZANAR", "EL MANZANO", "EL MELOCOTON", "EL MELON", "EL MEMBRILLO", "EL MOLLE", "EL MONTE", "EL PALQUI", "EL PENON", "EL QUISCO", "EL SALVADOR", "EL SAUCE", "EL TABO", "EL TAMBO", "EL TANGUE", "EMPEDRADO", "ENSENADA", "ENTRE LAGOS", "ERCILLA", "ESQUINA", "FARELLONES", "FILOMENA", "FLORIDA", "FREIRE", "FREIRINA", "FRESIA", "FRUTILLAR", "FUTALEUFU", "FUTRONO", "GABRIELA MISTRAL", "GALVARINO", "GENERAL LAGOS", "GORBEA", "GRANEROS", "GUADAL", "GUAITECAS", "GUALLECO", "GUANAQUEROS", "GUANGUALI", "GUAPILACUY", "GUARDIA VIEJA", "GUARILIHUE", "GUAYACAN", "HACIENDA LOS ANDES", "HIJUELAS", "HORCON", "HORCON IV", "HORNITOS", "HORNOPIREN", "HOSPITAL", "HUALAIHUE", "HUALANE", "HUALPENCILLO", "HUALPIN", "HUALQUI", "HUAMALATA", "HUARA", "HUASCO", "HUELDEN", "HUELLAHUE", "HUELQUEN", "HUENTELAUQUEN", "HUEPIL", "HUILLINCO", "HUINTIL", "ILLAPEL", "ILOCA", "IQUIQUE", "ISLA DE MAIPO", "ISLA NEGRA", "ISLA SANTA MARIA", "ISLUGA", "JUNCAL", "LA ARAUCANA", "LA ARENA", "LA ARENA PTO MONTT", "LA CALERA", "LA CEBADA", "LA CHIMBA", "LA CRUZ", "LA DORMIDA", "LA ESTRELLA", "LA HIGUERA", "LA JARILLA", "LA JUNTA", "LA LIGUA", "LA MARQUESA", "LA NEGRA", "LA OBRA", "LA PALMA DE QUILLOTA", "LA PARVA", "LA PLACILLA (PUNITAQUI)", "LA RUFINA", "LA SERENA", "LA TAPERA", "LA UNION", "LABRANZA", "LAGO RANCO", "LAGO VERDE", "LAGUNA ACULEO", "LAGUNA BLANCA", "LAGUNA VERDE", "LAGUNILLAS", "LAJA", "LAJAS BLANCAS", "LAMPA", "LANCO", "LARAQUETE", "LARMAHUE", "LAS BREAS", "LAS CABRAS", "LAS CARDAS", "LAS CARDAS SUR", "LAS CRUCES", "LAS DICHAS", "LAS DUNAS", "LAS HORTENCIAS", "LAS NIEVES", "LAS RAMADAS DE TULAHUEN", "LAS TACAS", "LAS TRANCAS", "LAS VENTANAS", "LAS VERTIENTES", "LASANA", "LAUTARO", "LEBU", "LECHAGUA", "LENCA", "LEONERA", "LEYDA", "LICANRAY", "LICANTEN", "LIMACHE", "LIMARI", "LINAO", "LINARES", "LINDEROS", "LIQUINE", "LIRIMA", "LIRQUEN", "LITUECHE", "LLAILLAY", "LLANOS DE GUANTA", "LLANQUIHUE", "LLICO", "LLIFEN", "LLOLLEO", "LO CHACON", "LO MIRANDA", "LO VALDES", "LO VALDIVIA", "LOLOL", "LOMAS DE LO AGUIRRE", "LONCOCHE", "LONGAVI", "LONQUEN", "LONQUIMAY", "LONTUE", "LOS ALAMOS", "LOS ANDES", "LOS ANGELES", "LOS BOLDOS", "LOS HORCONES", "LOS HORNOS", "LOS LAGOS", "LOS LAURELES", "LOS LINGUES", "LOS MAITENES", "LOS MOLLES", "LOS MUERMOS", "LOS NICHES", "LOS OLIVOS", "LOS SAUCES", "LOS VILOS", "LOTA", "LUMACO", "La Hauyca", "La Tirana", "MACHALI", "MAFIL", "MAICOLPUE", "MAIPO", "MAITENCILLO", "MALALCAHUELLO", "MALLOA", "MALLOCO", "MAMINA", "MANAO", "MANDINGA", "MARBELLA", "MARCHIHUE", "MARIA ELENA", "MARIA PINTO", "MATANZAS", "MAULE", "MAULLIN", "MECHAICO", "MECHUQUE", "MEHUIN", "MEIPO", "MEJILLONES", "MELINKA", "MELIPEUCO", "MELIPILLA", "METRI", "MINAS DEL PRADO", "MINCHA", "MININCO", "MOCHA", "MOLINA", "MOLINOS", "MONTE AGUILA", "MONTE AYMOND", "MONTE GRANDE", "MONTE PATRIA", "MONTENEGRO", "MORRILLOS", "MULCHEN", "NACIMIENTO", "NAHUELTORO", "NAL", "NANCAGUA", "NAVIDAD", "NEGRETE", "NELTUME", "NIEBLA", "NINHUE", "NIPAS", "NIQUEN", "NIREHUAO", "NIRIVILO", "NOGALES", "NOS", "NOVICIADO", "NUEVA BRAUNAU", "NUEVA IMPERIAL", "OCOA", "OLIVAR ALTO", "OLIVAR BAJO", "OLMUE", "OSORNO", "OVALLE", "PACHAMA", "PADRE HURTADO", "PADRE LAS CASAS", "PAIHUANO", "PAILLACO", "PAINE", "PAIPOTE", "PALENA", "PALMILLA san fernando", "PALOMAR", "PALQUIAL", "PAN DE AZUCAR", "PANGAL", "PANGUIPULLI", "PANIMAVIDA", "PANQUEHUE", "PAPOSO", "PAPUDO", "PARCELA EL CARMEN", "PAREDONES", "PARGUA", "PARRAL", "PAULDEO", "PEDREGAL", "PELARCO", "PELEQUEN", "PELLUHUE", "PEMUCO", "PENABLANCA", "PENAFLOR", "PENCAHUE", "PENCO", "PERALES", "PERALILLO", "PERQUENCO", "PETORCA", "PETROHUE", "PEULLA", "PEUMO", "PICA", "PICHASCA", "PICHI PELLUCO", "PICHICUY", "PICHIDANGUI", "PICHIDEGUA", "PICHILEMU", "PIEDRA AZUL", "PILLANLELBUN", "PINGUERAL", "PINTO", "PIRQUE", "PISAGUA", "PISCO ELQUI", "PITRUFQUEN", "PLACILLA (SAN FERNANDO)", "PLACILLA (VINA DEL MAR)", "PLAYA ANCHA", "POLCURA", "POLPAICO", "POMAIRE", "POPETA", "PORMA", "PORTEZUELO", "PORTILLO", "PORVENIR", "POZO ALMONTE", "PRIMAVERA", "PUAUCHO", "PUCATRIHUE", "PUCHUNCAVI", "PUCON", "PUEBLO SECO", "PUELO", "PUENTE NEGRO", "PUENTE QUILO", "PUERTECILLO", "PUERTO AGUIRRE", "PUERTO ALDEA", "PUERTO AYSEN", "PUERTO BERTRAND", "PUERTO BORIES", "PUERTO CHACABUCO", "PUERTO CISNES", "PUERTO DOMINGUEZ", "PUERTO MONTT", "PUERTO NATALES", "PUERTO OCTAY", "PUERTO SAAVEDRA", "PUERTO TORO", "PUERTO TRANQUILO", "PUERTO VARAS", "PUERTO VELERO", "PUERTO WILLIAMS", "PUMANQUE", "PUNITAQUI", "PUNTA ARENAS", "PUNTA COLORADA", "PUNTA CORONA", "PUNTA DE PARRA", "PUNTA DE TRALCA", "PUNTA DELGADA", "PUNTA LAVAPIE", "PUNUCAPA", "PUQUELDON", "PUREN", "PURRANQUE", "PUTAENDO", "PUYEHUE", "PUYUHUAPI", "PoconChile", "Putre", "QUEBRADA DE ALVARADO", "QUEBRADA DE TALCA", "QUEILEN", "QUELLON", "QUELON", "QUEMCHI", "QUEPE", "QUETALMAHUE", "QUEULE", "QUILACO", "QUILCHE", "QUILIMARI", "QUILLAGUA", "QUILLAIPE", "QUILLAITUN", "QUILLECO", "QUILLON", "QUILLOTA", "QUILPUE", "QUINCHAMALI", "QUINCHAO", "QUINTA DE TILCOCO", "QUINTAY", "QUINTERO", "QUIRIHUE", "QUIRIQUINA", "RADAL", "RAFAEL", "RAMADILLAS", "RANCAGUA", "RANGUELMO", "RANQUIL", "RAPEL", "RAUCO", "RAUQUEN", "RAYENCURA", "RECOLETA IV", "RENACA", "RENAICO", "RENGO", "REQUINOA", "RETIRO", "RIHUE", "RINCONADA", "RINCONADA DE GUZMAN", "RINCONADA DE SILVA", "RINIHUE", "RININAHUE", "RIO BUENO", "RIO CLARO", "RIO HURTADO", "RIO IBANEZ", "RIO NEGRO", "RIO VERDE", "ROBLE HUACHO", "ROCAS DE SANTO DOMINGO", "ROMERAL", "ROSARIO", "RUCA RAQUI (SAAVEDRA)", "RUCAPEQUEN", "RUNGUE", "SAGRADA FAMILIA", "SALADILLO", "SALAMANCA", "SAN ALFONSO", "SAN ANTONIO", "SAN CARLOS", "SAN CLEMENTE", "SAN ESTEBAN", "SAN FABIAN DE ALICO", "SAN FELIPE", "SAN FERNANDO", "SAN FRANCISCO DE MOSTAZAL", "SAN GABRIEL", "SAN GREGORIO", "SAN IGNACIO", "SAN ISIDRO DE QUILLOTA", "SAN JAVIER", "SAN JOSE DE LA MARIQUINA", "SAN JOSE DE MAIPO", "SAN JUAN", "SAN JUAN DE LA COSTA", "SAN JULIAN", "SAN MANUEL", "SAN MARCOS", "SAN NICOLAS", "SAN PABLO", "SAN PATRICIO", "SAN PEDRO DE ALCANTARA", "SAN PEDRO DE ATACAMA", "SAN PEDRO DE LA PAZ", "SAN PEDRO DE MELIPILLA", "SAN PEDRO DE QUILLOTA", "SAN RAFAEL", "SAN ROSENDO", "SAN SEBASTIAN", "SAN VICENTE DE TAGUATAGUA", "SANTA BARBARA", "SANTA CLARA", "SANTA CRUZ", "SANTA JUANA", "SANTA MARIA", "SANTA ROSA DE CHENA", "SANTIAGO", "SECTOR LA PENA", "SEWELL", "SIERRA GORDA", "SOCAIRE", "SOCOROMA", "SOCOS", "SORA", "SOTAQUI", "SOTOCA", "TABOLANGO", "TALAGANTE", "TALCA", "TALCAHUANO", "TALTAL", "TAMBILLO", "TANILVORO", "TEMUCO", "TENO", "TEODORO SCHMIDT", "TIERRA AMARILLA", "TIERRAS BLANCAS", "TIGNAMAR", "TILTIL", "TIRUA", "TOCONAO", "TOCOPILLA", "TOLTEN", "TOME", "TONGOY", "TOPOCALMA", "TOROICO", "TORRES DEL PAINE", "TORTEL", "TOTORALILLO", "TRAIGUEN", "TREGUALEMU", "TREHUACO", "TRES PINOS", "TROVOLHUE", "TRUMAO", "TRUPAN", "TUBUL", "TUCAPEL", "TULAHUEN", "TUNQUEN", "VALDIVIA", "VALDIVIA DE PAINE", "VALLE NEVADO", "VALLE SIMPSON", "VALLENAR", "VALPARAISO", "VEGAS DE ITATA", "VICHUQUEN", "VICTORIA", "VICUNA", "VILCUN", "VILLA ALEGRE", "VILLA ALEMANA", "VILLA ALHUE", "VILLA AMENGUAL", "VILLA BOLDO", "VILLA CERRO CASTILLO", "VILLA LOS RIOS", "VILLA MANIHUALES", "VILLA MERCEDES", "VILLA OHIGGINS", "VILLA ORTEGA", "VILLA PRAT", "VILLA SANTA LUCIA", "VILLARRICA", "VILLUCO", "VINA DEL MAR", "VISVIRI", "YAPE", "YERBAS BUENAS", "YUMBEL", "YUNGAY", "YUSTE", "ZAPALLAR", "ZEMITA"];
+// Comunas de la Región Metropolitana según columna E de la pestaña
+// 'Comunas - Home Delivery' del tarifario Blue. Es la ESCRITURA DE
+// REFERENCIA para la RM: si un cliente escribe mal una comuna de la RM,
+// se corrige a como aparece aquí.
+const COMUNAS_RM_HOMEDELIVERY = ["ALHUE", "BUIN", "CALERA DE TANGO", "CERRILLOS", "CERRO NAVIA", "COLINA", "CONCHALI", "CURACAVI", "EL BOSQUE", "EL MONTE", "ESTACION CENTRAL", "HUECHURABA", "INDEPENDENCIA", "ISLA DE MAIPO", "LA CISTERNA", "LA FLORIDA", "LA GRANJA", "LA PINTANA", "LA REINA", "LAMPA", "LAS CONDES", "LO BARNECHEA", "LO ESPEJO", "LO PRADO", "MACUL", "MAIPU", "MARIA PINTO", "MELIPILLA", "NUNOA", "PADRE HURTADO", "PAINE", "PEDRO AGUIRRE CERDA", "PENAFLOR", "PENALOLEN", "PIRQUE", "PROVIDENCIA", "PUDAHUEL", "PUENTE ALTO", "QUILICURA", "QUINTA NORMAL", "RECOLETA", "RENCA", "SAN BERNARDO", "SAN JOAQUIN", "SAN JOSE DE MAIPO", "SAN MIGUEL", "SAN PEDRO", "SAN RAMON", "SANTIAGO", "TALAGANTE", "TILTIL", "VITACURA"];
+// 346 comunas oficiales de Chile (división político-administrativa).
+const COMUNAS_CHILE = ["Arica", "Camarones", "Putre", "General Lagos", "Iquique", "Alto Hospicio", "Pozo Almonte", "Camiña", "Colchane", "Huara", "Pica", "Antofagasta", "Mejillones", "Sierra Gorda", "Taltal", "Calama", "Ollagüe", "San Pedro de Atacama", "Tocopilla", "María Elena", "Copiapó", "Caldera", "Tierra Amarilla", "Chañaral", "Diego de Almagro", "Vallenar", "Alto del Carmen", "Freirina", "Huasco", "La Serena", "Coquimbo", "Andacollo", "La Higuera", "Paihuano", "Vicuña", "Illapel", "Canela", "Los Vilos", "Salamanca", "Ovalle", "Combarbalá", "Monte Patria", "Punitaqui", "Río Hurtado", "Valparaíso", "Casablanca", "Concón", "Juan Fernández", "Puchuncaví", "Quintero", "Viña del Mar", "Isla de Pascua", "Los Andes", "Calle Larga", "Rinconada", "San Esteban", "La Ligua", "Cabildo", "Papudo", "Petorca", "Zapallar", "Quillota", "Calera", "Hijuelas", "La Cruz", "Nogales", "San Antonio", "Algarrobo", "Cartagena", "El Quisco", "El Tabo", "Santo Domingo", "San Felipe", "Catemu", "Llaillay", "Panquehue", "Putaendo", "Santa María", "Quilpué", "Limache", "Olmué", "Villa Alemana", "Santiago", "Cerrillos", "Cerro Navia", "Conchalí", "El Bosque", "Estación Central", "Huechuraba", "Independencia", "La Cisterna", "La Florida", "La Granja", "La Pintana", "La Reina", "Las Condes", "Lo Barnechea", "Lo Espejo", "Lo Prado", "Macul", "Maipú", "Ñuñoa", "Pedro Aguirre Cerda", "Peñalolén", "Providencia", "Pudahuel", "Quilicura", "Quinta Normal", "Recoleta", "Renca", "San Joaquín", "San Miguel", "San Ramón", "Vitacura", "Puente Alto", "Pirque", "San José de Maipo", "Colina", "Lampa", "Tiltil", "San Bernardo", "Buin", "Calera de Tango", "Paine", "Melipilla", "Alhué", "Curacaví", "María Pinto", "San Pedro", "Talagante", "El Monte", "Isla de Maipo", "Padre Hurtado", "Peñaflor", "Rancagua", "Codegua", "Coinco", "Coltauco", "Doñihue", "Graneros", "Las Cabras", "Machalí", "Malloa", "Mostazal", "Olivar", "Peumo", "Pichidegua", "Quinta de Tilcoco", "Rengo", "Requínoa", "San Vicente", "Pichilemu", "La Estrella", "Litueche", "Marchihue", "Navidad", "Paredones", "San Fernando", "Chépica", "Chimbarongo", "Lolol", "Nancagua", "Palmilla", "Peralillo", "Placilla", "Pumanque", "Santa Cruz", "Curicó", "Hualañé", "Licantén", "Molina", "Rauco", "Romeral", "Sagrada Familia", "Teno", "Vichuquén", "Talca", "Constitución", "Curepto", "Empedrado", "Maule", "Pelarco", "Pencahue", "Río Claro", "San Clemente", "San Rafael", "Linares", "Colbún", "Longaví", "Parral", "Retiro", "San Javier", "Villa Alegre", "Yerbas Buenas", "Cauquenes", "Chanco", "Pelluhue", "Chillán", "Bulnes", "Chillán Viejo", "El Carmen", "Pemuco", "Pinto", "Quillón", "San Ignacio", "Yungay", "Quirihue", "Cobquecura", "Coelemu", "Ninhue", "Portezuelo", "Ranquil", "Treguaco", "San Carlos", "Coihueco", "Ñiquén", "San Fabián", "San Nicolás", "Concepción", "Coronel", "Chiguayante", "Florida", "Hualqui", "Lota", "Penco", "San Pedro de la Paz", "Santa Juana", "Talcahuano", "Tomé", "Hualpén", "Lebu", "Arauco", "Cañete", "Contulmo", "Curanilahue", "Los Álamos", "Tirúa", "Los Ángeles", "Antuco", "Cabrero", "Laja", "Mulchén", "Nacimiento", "Negrete", "Quilaco", "Quilleco", "San Rosendo", "Santa Bárbara", "Tucapel", "Yumbel", "Alto Biobío", "Angol", "Collipulli", "Curacautín", "Ercilla", "Lonquimay", "Los Sauces", "Lumaco", "Purén", "Renaico", "Traiguén", "Victoria", "Temuco", "Carahue", "Cholchol", "Cunco", "Curarrehue", "Freire", "Galvarino", "Gorbea", "Lautaro", "Loncoche", "Melipeuco", "Nueva Imperial", "Padre Las Casas", "Perquenco", "Pitrufquén", "Pucón", "Saavedra", "Teodoro Schmidt", "Toltén", "Vilcún", "Villarrica", "Valdivia", "Corral", "Lanco", "Los Lagos", "Máfil", "Mariquina", "Paillaco", "Panguipulli", "La Unión", "Futrono", "Lago Ranco", "Río Bueno", "Osorno", "Puerto Octay", "Purranque", "Puyehue", "Río Negro", "San Juan de la Costa", "San Pablo", "Puerto Montt", "Calbuco", "Cochamó", "Fresia", "Frutillar", "Los Muermos", "Llanquihue", "Maullín", "Puerto Varas", "Castro", "Ancud", "Chonchi", "Curaco de Vélez", "Dalcahue", "Puqueldón", "Queilén", "Quellón", "Quemchi", "Quinchao", "Chaitén", "Futaleufú", "Hualaihué", "Palena", "Coyhaique", "Lago Verde", "Aysén", "Cisnes", "Guaitecas", "Cochrane", "O'Higgins", "Tortel", "Chile Chico", "Río Ibáñez", "Punta Arenas", "Laguna Blanca", "Río Verde", "San Gregorio", "Cabo de Hornos", "Antártica", "Porvenir", "Primavera", "Timaukel", "Natales", "Torres del Paine"];
+const SUCURSALES_STARKEN = [{"cod": "20", "comuna": "SAN PEDRO DE ATACAMA", "dir": "LICANCABUR 294", "nemon": "stca-a"}, {"cod": "34", "comuna": "TALTAL", "dir": "ARTURO PRAT  631", "nemon": "talt-a"}, {"cod": "37", "comuna": "DIEGO DE ALMAGRO", "dir": "AVENIDA JUAN MARTINEZ  1404", "nemon": "dalm-a"}, {"cod": "149", "comuna": "CAÑETE", "dir": "RIQUELME 047", "nemon": "cnte-a"}, {"cod": "150", "comuna": "COLLIPULLI", "dir": "O'CARROL 1504 (TERMINAL)", "nemon": "clli-a"}, {"cod": "188", "comuna": "NUEVA IMPERIAL", "dir": "BALMACEDA 479", "nemon": "impe-a"}, {"cod": "195", "comuna": "PUCÓN", "dir": "O' HIGGINS 910", "nemon": "pcon-a"}, {"cod": "1302", "comuna": "LONQUIMAY", "dir": "IGNACIO CARRERA PINTO  202, LOCAL B", "nemon": "lonq-p"}, {"cod": "1602", "comuna": "PUERTO NATALES", "dir": "MANUEL BULNES 1030", "nemon": "pnat-a"}, {"cod": "1650", "comuna": "ANCUD", "dir": "CHACABUCO 791", "nemon": "ancu-a"}, {"cod": "1693", "comuna": "TOCOPILLA", "dir": "SUCRE 1205", "nemon": "tocp-d"}, {"cod": "1864", "comuna": "LA REINA", "dir": "AVENIDA LARRAÍN 5862", "nemon": "Mall-a"}, {"cod": "1865", "comuna": "LA FLORIDA", "dir": "AVENIDA VICUÑA MACKENNA ORIENTE 7110, LOCAL LE-100", "nemon": "Mall-b"}, {"cod": "1866", "comuna": "HUECHURABA", "dir": "AVENIDA AMÉRICO VESPUCIO NORTE 1737", "nemon": "Mall-c"}, {"cod": "1884", "comuna": "ESTACIÓN CENTRAL", "dir": "AVENIDA ALAMEDA LIBERTADOR BERNARDO O'HIGGINS 3470", "nemon": "Mall-d"}, {"cod": "1885", "comuna": "PUENTE ALTO", "dir": "AVENIDA CAMILO HENRÍQUEZ 3692", "nemon": "Mall-e"}, {"cod": "1886", "comuna": "SAN BERNARDO", "dir": "AVENIDA PRESIDENTE JORGE ALESSANDRI RODRÍGUEZ 20040", "nemon": "Mall-f"}, {"cod": "2", "comuna": "ARICA", "dir": "AVENIDA BRASIL 121", "nemon": "aric-b"}, {"cod": "6", "comuna": "IQUIQUE", "dir": "BAJO MOLLE S.N KM 8", "nemon": "iqui-b"}, {"cod": "26", "comuna": "ANTOFAGASTA", "dir": "PEDRO AGUIRRE CERDA  8234", "nemon": "antf-d"}, {"cod": "247", "comuna": "PUNTA ARENAS", "dir": "EL OVEJERO  298", "nemon": "prna-b"}, {"cod": "727", "comuna": "LOS ÁNGELES", "dir": "AVENIDA SORVICENTA 2113", "nemon": "lsag-z"}, {"cod": "1279", "comuna": "CALAMA", "dir": "BALMACEDA  4219", "nemon": "clma-l"}, {"cod": "1465", "comuna": "PUERTO MONTT", "dir": "EL TENIENTE 160", "nemon": "mott-O"}, {"cod": "1647", "comuna": "CURICÓ", "dir": "AVENIDA ALESSANDRI 2019, BODEGA 17", "nemon": "crco-b"}, {"cod": "1802", "comuna": "OSORNO", "dir": "SEBASTOPOL 1809, BODEGA 1", "nemon": "osor-k"}, {"cod": "36", "comuna": "CHAÑARAL", "dir": "MERINO JARPA 1187", "nemon": "chan-a"}, {"cod": "55", "comuna": "LOS VILOS", "dir": "CAUPOLICAN 898", "nemon": "vilo-a"}, {"cod": "198", "comuna": "VILLARRICA", "dir": "ANFION MUÑOZ 657", "nemon": "vill-a"}, {"cod": "1735", "comuna": "VALLENAR", "dir": "SERRANO 85", "nemon": "vall-e"}, {"cod": "1736", "comuna": "OVALLE", "dir": "ARIZTIA ORIENTE 769, LOCAL 7", "nemon": "ovll-d"}, {"cod": "9", "comuna": "IQUIQUE", "dir": "ESMERALDA 594, TERMINAL TURBUS", "nemon": "iqui-h"}, {"cod": "22", "comuna": "MEJILLONES", "dir": "AVENIDA LATORRE  583", "nemon": "meji-a"}, {"cod": "35", "comuna": "DIEGO DE ALMAGRO", "dir": "AVENIDA POTRERILLOS NORTE 719", "nemon": "salv-a"}, {"cod": "40", "comuna": "COPIAPÓ", "dir": "CHANARCILLO 650, TERMINAL", "nemon": "cppo-z"}, {"cod": "43", "comuna": "HUASCO", "dir": "CRAIG  260 - B", "nemon": "hsco-a"}, {"cod": "47", "comuna": "LA SERENA", "dir": "BALMACEDA 1475", "nemon": "srna-d"}, {"cod": "48", "comuna": "LA SERENA", "dir": "AMUNATEGUI 107, LOCAL C-2, C -3", "nemon": "srna-e"}, {"cod": "51", "comuna": "COQUIMBO", "dir": "MIRAFLORES  679", "nemon": "cqbo-z"}, {"cod": "56", "comuna": "CABILDO", "dir": "FERROCARRIL A IQUIQUE 390", "nemon": "cbdo-a"}, {"cod": "57", "comuna": "LA LIGUA", "dir": "CALLE DOMINGO - ORTIZ DE ROSAS 830", "nemon": "lgua-a"}, {"cod": "58", "comuna": "PAPUDO", "dir": "MIRAFLORES 166", "nemon": "ppdo-a"}, {"cod": "67", "comuna": "QUILPUÉ", "dir": "BLANCO 1546", "nemon": "quil-b"}, {"cod": "68", "comuna": "SAN ANTONIO", "dir": "UNO NORTE 023, LOCAL 15, GALERÍA EL FARO", "nemon": "anto-a"}, {"cod": "77", "comuna": "VALPARAÍSO", "dir": "AVENIDA PEDRO MONTT S/N,  OFICINA 7 (RODOVIARIO)", "nemon": "vlpo-b"}, {"cod": "82", "comuna": "RANCAGUA", "dir": "O'CARROL 1175", "nemon": "rgua-b"}, {"cod": "88", "comuna": "RENGO", "dir": "COLO COLO 362", "nemon": "rngo-a"}, {"cod": "91", "comuna": "CURICÓ", "dir": "MANZO DE VELASCO  0102", "nemon": "crco-a"}, {"cod": "93", "comuna": "TALCA", "dir": "3 SUR 1962", "nemon": "tlca-b"}, {"cod": "99", "comuna": "QUIRIHUE", "dir": "JJ.PEREZ 550 OFICINA 8-9 (TERMINAL)", "nemon": "quir-a"}, {"cod": "101", "comuna": "COELEMU", "dir": "JULIO  LAMAS 309", "nemon": "coel-a"}, {"cod": "109", "comuna": "TOMÉ", "dir": "SOTOMAYOR 1080", "nemon": "tome-a"}, {"cod": "113", "comuna": "TALCAHUANO", "dir": "BULNES 217 LOCAL 3", "nemon": "thno-B"}, {"cod": "116", "comuna": "CONCEPCIÓN", "dir": "CAMILO HENRIQUEZ 2625,  TERMINAL", "nemon": "conc-b"}, {"cod": "118", "comuna": "CONCEPCIÓN", "dir": "TUCAPEL 530", "nemon": "conc-d"}, {"cod": "123", "comuna": "PENCO", "dir": "FREIRE 445, LOCAL C", "nemon": "pnco-a"}, {"cod": "124", "comuna": "EL CARMEN", "dir": "ESMERALDA 578, LOCAL B", "nemon": "cmen-i"}, {"cod": "126", "comuna": "CHIGUAYANTE", "dir": "BERNARDO O'HIGGINS 2681", "nemon": "chte-a"}, {"cod": "127", "comuna": "CABRERO", "dir": "AVENIDA VIAL .A.PRAT OF.01 TNAL.RODOV.", "nemon": "cbro-a"}, {"cod": "128", "comuna": "YUMBEL", "dir": "CRUZ 980", "nemon": "yumb-a"}, {"cod": "129", "comuna": "YUNGAY", "dir": "ESMERALDA 74, LOCAL 6,7,8", "nemon": "yung-i"}, {"cod": "130", "comuna": "CORONEL", "dir": "SOTOMAYOR 656", "nemon": "coro-a"}, {"cod": "131", "comuna": "LOTA", "dir": "ANIBAL PINTO 270, LOTA BAJO", "nemon": "lota-a"}, {"cod": "135", "comuna": "LAJA", "dir": "BALMACEDA 534", "nemon": "laja-a"}, {"cod": "143", "comuna": "SANTA BÁRBARA", "dir": "BAQUEDANO 999, OFICINA 02", "nemon": "sbar-a"}, {"cod": "146", "comuna": "MULCHÉN", "dir": "ANIBAL PINTO 890 , OFICINA 07", "nemon": "mulc-a"}, {"cod": "148", "comuna": "ANGOL", "dir": "AVENIDA GENERAL BONILLA 428,  OFICINA 15 TERMINAL RODOVIARIO", "nemon": "ango-z"}, {"cod": "153", "comuna": "ERCILLA", "dir": "AVENIDA ERCILLA 560", "nemon": "erci-a"}, {"cod": "154", "comuna": "VICTORIA", "dir": "AVENIDA ARTURO PRAT 1007", "nemon": "vict-a"}, {"cod": "155", "comuna": "TRAIGUÉN", "dir": "SANTA CRUZ 659 LOCAL 18", "nemon": "trai-a"}, {"cod": "165", "comuna": "PADRE LAS CASAS", "dir": "MAQUEHUE 1244, LOCAL 4", "nemon": "tmco-b"}, {"cod": "176", "comuna": "TEMUCO", "dir": "AVENIDA LAS PERDICES 547", "nemon": "tmco-n"}, {"cod": "178", "comuna": "TEMUCO", "dir": "CALLE TORREMOLINOS 320, LOCAL 4", "nemon": "tmco-r"}, {"cod": "186", "comuna": "CARAHUE", "dir": "CAUPOLICAN 260", "nemon": "crhe-a"}, {"cod": "189", "comuna": "PUERTO SAAVEDRA", "dir": "AVENIDA EJERCITO 1108", "nemon": "psav-a"}, {"cod": "191", "comuna": "PITRUFQUÉN", "dir": "BERNARDO O'HIGGINS 520", "nemon": "ptru-a"}, {"cod": "193", "comuna": "GORBEA", "dir": "BERNARDO O'HIGGINS 501", "nemon": "gorb-a"}, {"cod": "206", "comuna": "VILLARRICA", "dir": "CACIQUE MARICHANQUIN 240", "nemon": "lray-a"}, {"cod": "209", "comuna": "PANGUIPULLI", "dir": "GUIDO BECK DE RAMBERGA 688", "nemon": "cnpe-j"}, {"cod": "210", "comuna": "PANGUIPULLI", "dir": "JOSE MIGUEL CARRERA 784", "nemon": "pang-a"}, {"cod": "213", "comuna": "SAN JOSÉ DE LA MARIQUINA", "dir": "ARTURO PRAT N°8", "nemon": "sjmq-J"}, {"cod": "220", "comuna": "VALDIVIA", "dir": "RAMON PICARTE 1119", "nemon": "vald-z"}, {"cod": "221", "comuna": "LOS LAGOS", "dir": "QUINCHILCA 303", "nemon": "lago-a"}, {"cod": "222", "comuna": "PAILLACO", "dir": "18 DE OCTUBRE 939", "nemon": "pail-a"}, {"cod": "224", "comuna": "FUTRONO", "dir": "LOS CARRERA 9", "nemon": "futr-I"}, {"cod": "225", "comuna": "LA UNIÓN", "dir": "ARTURO PRAT 833", "nemon": "unio-a"}, {"cod": "226", "comuna": "RÍO BUENO", "dir": "ESMERALDA 1481", "nemon": "rbno-a"}, {"cod": "228", "comuna": "LAGO RANCO", "dir": "LA SERENA 100", "nemon": "rnco-I"}, {"cod": "231", "comuna": "OSORNO", "dir": "LOS CARRERA 1387", "nemon": "osor-z"}, {"cod": "233", "comuna": "PURRANQUE", "dir": "ANIBAL PINTO 131", "nemon": "purr-a"}, {"cod": "234", "comuna": "FRUTILLAR", "dir": "ALIANZA CRISTIANA Y MISIONERA 150", "nemon": "frut-a"}, {"cod": "235", "comuna": "FRESIA", "dir": "AVENIDA SAN CARLOS 280", "nemon": "fsia-a"}, {"cod": "242", "comuna": "PUERTO MONTT", "dir": "ALCALDE 538", "nemon": "mott-x"}, {"cod": "244", "comuna": "CALBUCO", "dir": "ANTONIO VARAS 72", "nemon": "cbco-a"}, {"cod": "1909", "comuna": "COYHAIQUE", "dir": "MAGALLANES  303", "nemon": "balm-p"}, {"cod": "251", "comuna": "SANTIAGO", "dir": "TARAPACA 840", "nemon": "stgo-d"}, {"cod": "259", "comuna": "RECOLETA", "dir": "BELLAVISTA 473", "nemon": "stgo-l"}, {"cod": "265", "comuna": "RECOLETA", "dir": "TAVARE 630", "nemon": "stgo-r"}, {"cod": "268", "comuna": "CERRILLOS", "dir": "AVENIDA PEDRO AGUIRRE CERDA 4298", "nemon": "stgo-u"}, {"cod": "269", "comuna": "PROVIDENCIA", "dir": "ELIODORO YANEZ 1550", "nemon": "stgo-v"}, {"cod": "270", "comuna": "SANTIAGO", "dir": "MORANDE 883-887", "nemon": "stgo-w"}, {"cod": "272", "comuna": "LA CISTERNA", "dir": "AVENIDA JOSE MIGUEL CARRERA 6600, LOCAL 3 Y 4", "nemon": "stgo-y"}, {"cod": "273", "comuna": "ESTACIÓN CENTRAL", "dir": "RUIZ TAGLE 220", "nemon": "STGO-Z"}, {"cod": "280", "comuna": "SANTIAGO", "dir": "PORVENIR 367", "nemon": "stgo-G"}, {"cod": "281", "comuna": "SANTIAGO", "dir": "FRANKLIN 549", "nemon": "stgo-H"}, {"cod": "285", "comuna": "HUECHURABA", "dir": "AVENIDA PEDRO FONTOVA 6651, LOCAL 22", "nemon": "stgo-L"}, {"cod": "290", "comuna": "LA FLORIDA", "dir": "AVENIDA AMERICO VESPUCIO 7500, SUPERMERCADO MONTSERRAT", "nemon": "stgo-Q"}, {"cod": "293", "comuna": "SANTIAGO", "dir": "PORTUGAL 1251", "nemon": "stgo-T"}, {"cod": "295", "comuna": "SAN MIGUEL", "dir": "LEON PRADO 1061", "nemon": "stgo-V"}, {"cod": "296", "comuna": "SAN BERNARDO", "dir": "ARTURO PRAT  435,  LOCAL 101", "nemon": "stgo-W"}, {"cod": "297", "comuna": "LA REINA", "dir": "AVENIDA ALCALDE FERNANDO CASTILLO VELASCO 8751, LOCAL 13", "nemon": "stgo-X"}, {"cod": "299", "comuna": "QUILICURA", "dir": "AVENIDA CAUPOLICAN 9750, LOCAL 2B", "nemon": "stgo-Z"}, {"cod": "305", "comuna": "SANTIAGO", "dir": "MONEDA 1523", "nemon": "stgo-f"}, {"cod": "306", "comuna": "SANTIAGO", "dir": "SAN PABLO 2353", "nemon": "Stgo-g"}, {"cod": "308", "comuna": "PUENTE ALTO", "dir": "AVENIDA CONCHA Y TORO 3955, LOCAL 4 Y 5", "nemon": "Stgo-I"}, {"cod": "312", "comuna": "PUDAHUEL", "dir": "PUERTO MADERO 9710, BODEGA E8", "nemon": "Stgo-m"}, {"cod": "314", "comuna": "QUINTA NORMAL", "dir": "AVENDIA MAPOCHO 4108", "nemon": "stgo-o"}, {"cod": "315", "comuna": "INDEPENDENCIA", "dir": "AVENIDA INDEPENDENCIA 4553 E", "nemon": "stgo-p"}, {"cod": "322", "comuna": "PROVIDENCIA", "dir": "HOLANDA 0121", "nemon": "stgo-w"}, {"cod": "323", "comuna": "SANTIAGO", "dir": "SERRANO 699", "nemon": "Stgo-x"}, {"cod": "583", "comuna": "ILLAPEL", "dir": "INDEPENDENCIA  0152, LOCAL 2", "nemon": "illa-a"}, {"cod": "604", "comuna": "MACHALÍ", "dir": "AVENIDA SAN JUAN 508, LOCAL 2", "nemon": "mach-a"}, {"cod": "788", "comuna": "QUILLÓN", "dir": "ROBLE 604", "nemon": "qlon-a"}, {"cod": "814", "comuna": "MAIPÚ", "dir": "BELARMINO OSORIO 13", "nemon": "stgo-D"}, {"cod": "984", "comuna": "EL QUISCO", "dir": "ISIDORO DUBOURNAIS 1350, ESQUINA AVILA", "nemon": "qsco-a"}, {"cod": "1003", "comuna": "BULNES", "dir": "VICTOR BIANCHI 303, LOCAL C", "nemon": "bnes-a"}, {"cod": "1044", "comuna": "VALPARAÍSO", "dir": "AVENIDA CURAUMA 2961", "nemon": "crma-a"}, {"cod": "1053", "comuna": "SAN FERNANDO", "dir": "CALLE RANCAGUA 825", "nemon": "sfdo-b"}, {"cod": "1059", "comuna": "ALTO HOSPICIO", "dir": "AVENIDA LA PAMPA 3117, LOCAL 2", "nemon": "iqui-f"}, {"cod": "1094", "comuna": "ARAUCO", "dir": "CALLE CAUPOLICAN 1B, SITIO 7, PASAJE 1", "nemon": "auco-p"}, {"cod": "1097", "comuna": "CURANILAHUE", "dir": "ARTURO PRAT 822", "nemon": "cnil-p"}, {"cod": "1098", "comuna": "LEBU", "dir": "MACKAY 405,  ESQUINA CARRERA", "nemon": "lebu-p"}, {"cod": "1099", "comuna": "LOS ÁLAMOS", "dir": "CALLE LUIS SAEZ MORA 414", "nemon": "alam-p"}, {"cod": "1100", "comuna": "PURÉN", "dir": "SAAVEDRA 416", "nemon": "pren-p"}, {"cod": "1108", "comuna": "ANTOFAGASTA", "dir": "LATORRE 2751", "nemon": "antf-j"}, {"cod": "1128", "comuna": "NACIMIENTO", "dir": "JULIO HEMMELMANN 1115,  OFICINA 1", "nemon": "nsto-b"}, {"cod": "1185", "comuna": "TOLTÉN", "dir": "O´HIGGINS 405-C", "nemon": "tten-a"}, {"cod": "1197", "comuna": "SANTIAGO", "dir": "VICUNA MACKENNA 1221, LOCAL 2B", "nemon": "Stgo-1"}, {"cod": "1200", "comuna": "RENCA", "dir": "AVENIDA FERMÍN VIVACETA 1128", "nemon": "Stgo-7"}, {"cod": "1207", "comuna": "ESTACIÓN CENTRAL", "dir": "IQUIQUE 334", "nemon": "STGO-0"}, {"cod": "1270", "comuna": "SANTA CRUZ", "dir": "AVENIDA ORLANDI 26", "nemon": "scru-a"}, {"cod": "1276", "comuna": "QUILLOTA", "dir": "LA CONCEPCION 383,  LOCAL 2", "nemon": "qill-b"}, {"cod": "1295", "comuna": "CUNCO", "dir": "BALMACEDA 341-A", "nemon": "cnco-b"}, {"cod": "1322", "comuna": "LAS CONDES", "dir": "GILBERTO FUENZALIDA 231, LOCAL 02", "nemon": "stgo-U"}, {"cod": "1345", "comuna": "CHILLÁN", "dir": "LONGITUDINAL SUR 0113", "nemon": "chll-b"}, {"cod": "1366", "comuna": "PUERTO VARAS", "dir": "DEL SALVADOR 1093", "nemon": "pvra-t"}, {"cod": "1384", "comuna": "SANTIAGO", "dir": "CHACABUCO  92", "nemon": "Stgo-4"}, {"cod": "1412", "comuna": "MAIPÚ", "dir": "AVENIDA PAJARITOS 4741, LOCAL 2", "nemon": "Stgo-%"}, {"cod": "1441", "comuna": "PUDAHUEL", "dir": "SAN PABLO 8556 A-1", "nemon": "stgo-N"}, {"cod": "1445", "comuna": "AYSÉN", "dir": "MICHIMALONCO 502 ESQUINA CARRERA", "nemon": "pays-a"}, {"cod": "1450", "comuna": "VALDIVIA", "dir": "CALLE LAS ENCINAS 41 LOCAL 3 y 6", "nemon": "vald-n"}, {"cod": "1461", "comuna": "TEMUCO", "dir": "AVENIDA LUIS DURAND 02187, LOCAL 106", "nemon": "tmco-n"}, {"cod": "1484", "comuna": "CALDERA", "dir": "CALLE GANA 241-A", "nemon": "cdra-d"}, {"cod": "1485", "comuna": "PICHILEMU", "dir": "AVENIDA COMERCIO 1698", "nemon": "plmu-a"}, {"cod": "1491", "comuna": "QUILPUÉ", "dir": "MARGA MARGA 1672", "nemon": "quil-a"}, {"cod": "1512", "comuna": "TALCA", "dir": "CALLE 6 PONIENTE 498, VILLA EDEN", "nemon": "tlca-k"}, {"cod": "1541", "comuna": "SAN CARLOS", "dir": "PANAMERICANA 733", "nemon": "scar-b"}, {"cod": "1576", "comuna": "LINARES", "dir": "KURT MOLLER 199", "nemon": "lina-b"}, {"cod": "1600", "comuna": "TEMUCO", "dir": "ANTONIO VARAS 609", "nemon": "tmco-y"}, {"cod": "1624", "comuna": "PUDAHUEL", "dir": "AVENIDA TENIENTE CRUZ 570, LOCAL 1", "nemon": "STGO-s"}, {"cod": "1626", "comuna": "LANCO", "dir": "LIBERTAD 134", "nemon": "lanc-e"}, {"cod": "1631", "comuna": "VIÑA DEL MAR", "dir": "LIMACHE 3426", "nemon": "vina-v"}, {"cod": "1632", "comuna": "ISLA DE PASCUA", "dir": "ISLA DE PASCUA", "nemon": "ipas-a"}, {"cod": "1634", "comuna": "VIÑA DEL MAR", "dir": "AVENIDA VALPARAISO 1195, LOCAL 1", "nemon": "vina-w"}, {"cod": "1643", "comuna": "PARRAL", "dir": "DELICIAS DEL SUR  562", "nemon": "parr-e"}, {"cod": "1644", "comuna": "VALPARAÍSO", "dir": "AVENIDA BRASIL 1538, CENTRO, FRENTE AL ARCO BRITÁNICO", "nemon": "vlpo-j"}, {"cod": "1655", "comuna": "PEÑALOLÉN", "dir": "AVENIDA AMÉRICO VESPUCIO 886, LOCAL C", "nemon": "STGO-v"}, {"cod": "1658", "comuna": "GRANEROS", "dir": "CAMINO REAL 265", "nemon": "gnro-a"}, {"cod": "1659", "comuna": "VILLA ALEMANA", "dir": "MATURANA 195", "nemon": "vial-d"}, {"cod": "1667", "comuna": "LAS CONDES", "dir": "LOS DOMINICOS  7550, LOCAL 3", "nemon": "STGO -x"}, {"cod": "1670", "comuna": "PADRE HURTADO", "dir": "CAMINO SAN ALBERTO HURTADO  1630, LOCAL 5", "nemon": "phur-a"}, {"cod": "1671", "comuna": "QUELLÓN", "dir": "22 DE MAYO 2278", "nemon": "quel-a"}, {"cod": "1673", "comuna": "MELIPILLA", "dir": "AVENIDA VICUNA MACKENNA 220, LOCAL 104", "nemon": "meli-b"}, {"cod": "1678", "comuna": "CONCÓN", "dir": "AVENIDA MAGALLANES 1050, LOCAL 32-33", "nemon": "ccon-b"}, {"cod": "1679", "comuna": "LAS CONDES", "dir": "AVENIDA  LAS CONDES 7295", "nemon": "STGO-1"}, {"cod": "1680", "comuna": "TALAGANTE", "dir": "AVENIDA 21 DE MAYO 1081, LOCAL 4", "nemon": "STGO-2"}, {"cod": "1681", "comuna": "IQUIQUE", "dir": "HEROES DE LA CONCEPCION 2608", "nemon": "iqui-n"}, {"cod": "1682", "comuna": "LA FLORIDA", "dir": "AVENIDA LA FLORIDA 9660, LOCAL 15", "nemon": "STGO-T"}, {"cod": "1687", "comuna": "PROVIDENCIA", "dir": "PROVIDENCIA 1308, LOCAL 9", "nemon": "STGO-4"}, {"cod": "1688", "comuna": "TEMUCO", "dir": "PABLO NERUDA 02155 LOCAL 3", "nemon": "tmco-Z"}, {"cod": "1689", "comuna": "PEÑALOLÉN", "dir": "AVENIDA CONSISTORIAL 2701, LOCAL 4", "nemon": "STGO -y"}, {"cod": "1694", "comuna": "SAN JOAQUÍN", "dir": "AVENIDA SANTA ROSA 5320", "nemon": "STGO -5"}, {"cod": "1732", "comuna": "LA FLORIDA", "dir": "AVENIDA VICUNA MACKENNA ORIENTE 6331, LOCAL 3", "nemon": "STGO-9"}, {"cod": "1733", "comuna": "LA FLORIDA", "dir": "ROJAS MAGALLANES 3638, LOCAL 1", "nemon": "STGO-0"}, {"cod": "1734", "comuna": "PUERTO MONTT", "dir": "GABRIELA MISTRAL  957, LOCAL 6", "nemon": "mott-r"}, {"cod": "1750", "comuna": "COLINA", "dir": "AVENIDA NMACULADA CONCEPCION 305", "nemon": "clna-b"}, {"cod": "1753", "comuna": "LIMACHE", "dir": "PASEO LAS ARAUCARIAS PALMIRA ROMANO SUR 405, LOCAL 2", "nemon": "lima-d"}, {"cod": "1754", "comuna": "ÑUÑOA", "dir": "ROMAN DIAZ 2236", "nemon": "STGO-C"}, {"cod": "1758", "comuna": "QUINTA NORMAL", "dir": "MAPOCHO 5535", "nemon": "STGO-D"}, {"cod": "1759", "comuna": "BUIN", "dir": "CALLE JOSE MANUEL BALMACEDA 899, LOCAL 6 Y 7", "nemon": "Buin-b"}, {"cod": "1760", "comuna": "PEÑAFLOR", "dir": "ALCALDE LUIS ARAYA CERECEDA 4202, LOCAL B", "nemon": "STGO-F"}, {"cod": "1761", "comuna": "PUENTE ALTO", "dir": "CLAVERO 80, LOCAL 2", "nemon": "STGO-G"}, {"cod": "1763", "comuna": "SANTIAGO", "dir": "ARTURO PRAT  1113", "nemon": "STGO-H"}, {"cod": "1765", "comuna": "LAS CONDES", "dir": "GENERAL FRANCISCO BARCELO 44,  L.1 40 L.2", "nemon": "STGO-I"}, {"cod": "1766", "comuna": "SANTIAGO", "dir": "MONEDA 1869, BODEGA 2", "nemon": "STGO-J"}, {"cod": "1769", "comuna": "RANCAGUA", "dir": "CALLE EL MEMBRILLAR 10 LOCAL 7/8", "nemon": "rgua-2"}, {"cod": "1772", "comuna": "RENCA", "dir": "AVENIDA DOMINGO SANTA MARIA 4084, LOCAL 3", "nemon": "STGO-L"}, {"cod": "1773", "comuna": "EL BOSQUE", "dir": "GRAN AVENIDA JOSE MIGUEL CARRERA 10750", "nemon": "STGO-M"}, {"cod": "1774", "comuna": "VITACURA", "dir": "GERONIMO DE ALDERETE  1554, LOCAL 2", "nemon": "STGO-N"}, {"cod": "1775", "comuna": "LAUTARO", "dir": "JOSE MIGUEL CARRERA 340 LOCAL 11", "nemon": "laut-d"}, {"cod": "1776", "comuna": "RECOLETA", "dir": "AVENIDA RECOLETA 2746, LOCAL 8", "nemon": "STGO-O"}, {"cod": "1777", "comuna": "LAS CONDES", "dir": "AVENIDA APOQUINDO 3401, LOCAL 1", "nemon": "STGO-P"}, {"cod": "1780", "comuna": "CASABLANCA", "dir": "AVENIDA PORTALES 810", "nemon": "cabl-a"}, {"cod": "1782", "comuna": "CURACAVÍ", "dir": "AVENIDA AMBROSIO OHIGGINS 1326, LOCAL 5", "nemon": "STGO-S"}, {"cod": "1784", "comuna": "OSORNO", "dir": "VALPARAISO 592", "nemon": "osor-g"}, {"cod": "1786", "comuna": "LAS CONDES", "dir": "BALMORAL 309, LOCAL 4", "nemon": "STGO-T"}, {"cod": "1789", "comuna": "SAN ANTONIO", "dir": "AVENIDA CHILE 378", "nemon": "lleo-c"}, {"cod": "1790", "comuna": "PUNTA ARENAS", "dir": "AVENIDA ESPAÑA  01375", "nemon": "prna-d"}, {"cod": "1791", "comuna": "PROVIDENCIA", "dir": "AVENIDA PROVIDENCIA  2210, LOCAL 9", "nemon": "STGO-V"}, {"cod": "1792", "comuna": "LO PRADO", "dir": "SAN PABLO 6000, LOCAL B", "nemon": "STGO-W"}, {"cod": "1793", "comuna": "PUENTE ALTO", "dir": "AVENIDA GABRIELA  02710, LOCAL 3", "nemon": "STGO-X"}, {"cod": "1798", "comuna": "SALAMANCA", "dir": "CALLE MANUEL BULNES 214", "nemon": "smca-b"}, {"cod": "1799", "comuna": "LO BARNECHEA", "dir": "AVENIDA LA DEHESA  2121, LOCAL 1", "nemon": "STGO-Y"}, {"cod": "1800", "comuna": "QUILICURA", "dir": "AVENIDA LIBERTADOR O´HIGGINS 358 , LOCAL 11", "nemon": "STGO-Z"}, {"cod": "1801", "comuna": "SAN VICENTE DE TAGUATAGUA", "dir": "AVENIDA CENTRAL 251, BODEGA 3", "nemon": "svic-a"}, {"cod": "1803", "comuna": "VICUÑA", "dir": "GABRIELA MISTRAL 514", "nemon": "vcna-b"}, {"cod": "1805", "comuna": "HUALPÉN", "dir": "CALLE COLON 7948", "nemon": "hpen-a"}, {"cod": "1806", "comuna": "MOLINA", "dir": "AVENIDA LUIS CRUZ MARTINEZ 1563, LOCAL 3", "nemon": "moli-a"}, {"cod": "1807", "comuna": "SAN FELIPE", "dir": "CALLE YUNGAY 1311", "nemon": "sfel-e"}, {"cod": "1808", "comuna": "CAUQUENES", "dir": "ANTONIO VARAS 840-A", "nemon": "cauq-b"}, {"cod": "1809", "comuna": "COPIAPÓ", "dir": "LOS CARRERA 4723, LOCAL 23", "nemon": "cppo-m"}, {"cod": "1811", "comuna": "LONCOCHE", "dir": "AVENIDA VILLARRICA 300, LOCAL 10", "nemon": "lonc-d"}, {"cod": "1813", "comuna": "CONSTITUCIÓN", "dir": "CALLE PRIETO 963, LOCAL  4", "nemon": "cont-a"}, {"cod": "1814", "comuna": "LOS ANDES", "dir": "AVENIDA SANTA TERESA 737, LOCAL 6", "nemon": "ande-b"}, {"cod": "1815", "comuna": "CHILLÁN", "dir": "ALONSO DE ERCILLA 2780, LOCAL 9", "nemon": "chll-n"}, {"cod": "1816", "comuna": "LOS ÁNGELES", "dir": "CALLE CAUPOLICAN 583", "nemon": "isag-n"}, {"cod": "1817", "comuna": "SAN BERNARDO", "dir": "CALLE EUCALIPTUS 273, LOCAL 6 Y 7", "nemon": "STGO-E"}, {"cod": "1823", "comuna": "QUILLOTA", "dir": "AVENIDA VALPARAISO 2150, LOCAL 24", "nemon": "qill-g"}, {"cod": "1824", "comuna": "LLAILLAY", "dir": "CALLE SALVADOR GONZALEZ LOTE 12,  LOCAL 230- 232", "nemon": "llay-b"}, {"cod": "1825", "comuna": "LITUECHE", "dir": "AVENIDA HERMANOS CARRERA 561, LOCALES 108 Y 109", "nemon": "litu-a"}, {"cod": "1826", "comuna": "PUDAHUEL", "dir": "AMERICO VESPUCIO 1309, LOCAL 103", "nemon": "STGO-#"}, {"cod": "1827", "comuna": "VILCÚN", "dir": "CALLE ARTURO PRAT 282 -C", "nemon": "vilc-b"}, {"cod": "1828", "comuna": "MAIPÚ", "dir": "AVENIDA EL ROSAL 6361, LOCAL 6 Y 7", "nemon": "STGO-"}, {"cod": "1829", "comuna": "SAN JAVIER", "dir": "AVENIDA BALMACEDA 2273", "nemon": "sjav-a"}, {"cod": "1831", "comuna": "SAN PEDRO DE LA PAZ", "dir": "CALLE LOS MANIOS 7287, LOCAL 11", "nemon": "splp-c"}, {"cod": "1832", "comuna": "MAIPÚ", "dir": "CAMINO A MELIPILLA 15900, LOCAL 1012", "nemon": "STGO-/"}, {"cod": "1833", "comuna": "PEÑALOLÉN", "dir": "AVENIDA AMERICO VESPUCIO 3100, LOCAL 4", "nemon": "STGO-&"}, {"cod": "1834", "comuna": "VIÑA DEL MAR", "dir": "AVENIDA BORGONO 14415, LOCAL 2", "nemon": "rnca-b"}, {"cod": "1836", "comuna": "QUILPUÉ", "dir": "AVENIDA LOS CARRERA 0877", "nemon": "quil-e"}, {"cod": "1839", "comuna": "TALCA", "dir": "LAS RASTRAS 2751", "nemon": "tlca-a"}, {"cod": "1840", "comuna": "COQUIMBO", "dir": "AVENIDA PEDRO NOLASCO VIDELA 340, LOCAL 01", "nemon": "cqbo-i"}, {"cod": "1844", "comuna": "CONCEPCIÓN", "dir": "COSME CHURRUCA 75, LOCAL 7", "nemon": "conc-e"}, {"cod": "1845", "comuna": "SAN PEDRO DE LA PAZ", "dir": "LAGUNA GRANDE 115 SAN PEDRO DEL VALLE, LOCAL 8 Y 9", "nemon": "splp-d"}, {"cod": "1846", "comuna": "CALERA", "dir": "JOSE JOAQUIN PEREZ 595-599, LOCAL 1", "nemon": "cale-f"}, {"cod": "1848", "comuna": "Talca", "dir": "SAN MIGUEL 2630", "nemon": "tlca-p"}, {"cod": "1868", "comuna": "CURACAUTÍN", "dir": "CALLE MANUEL RODRIGUEZ 1164 B", "nemon": "ctin-b"}, {"cod": "1870", "comuna": "PUCHUNCAVÍ", "dir": "AGUAS CLARAS RUTA F-30 ESQUINA F-124 LOCAL 20-21", "nemon": "mait-b"}, {"cod": "1910", "comuna": "CASTRO", "dir": "DIEGO PORTALES 555", "nemon": "ctro-d"}, {"cod": "282", "comuna": "ÑUÑOA", "dir": "JUAN MOYA 22", "nemon": "STGO-I"}, {"cod": "310", "comuna": "MACUL", "dir": "AVENIDA MACUL 2594", "nemon": "stgo-k"}, {"cod": "1271", "comuna": "HUECHURABA", "dir": "AVENIDA LOS JARDINES 972, LOCAL 2B", "nemon": "Stgo-Q"}, {"cod": "1770", "comuna": "LA FLORIDA", "dir": "WALKER MARTINEZ 1501", "nemon": "STGO-K"}, {"cod": "1781", "comuna": "COLINA", "dir": "AVENIDA CHICUREO 2300", "nemon": "STGO-R"}, {"cod": "1821", "comuna": "VIÑA DEL MAR", "dir": "1 PONIENTE 1392", "nemon": "vina-x"}, {"cod": "1820", "comuna": "LAS CONDES", "dir": "AVENIDA AMERICO VESPUCIO SUR 1880", "nemon": "STGO-x"}];
+
 let processedData = null;
 let originalFilename = '';
 let boletasMap = {}; // shopifyId (string) -> { folio, monto }
@@ -1249,6 +1276,201 @@ async function geocode(direccion, comuna, apiKey) {
 }
 
 // Normaliza para comparar comunas ignorando tildes/mayúsculas.
+// ═══════════════════════════════════════════════════════════════
+//  VALIDADOR DE COMUNAS Y SUCURSALES (sin internet, datos embebidos)
+//  A) Corrige comunas mal escritas comparando con las 726 oficiales
+//     de Tarifa Smart (ej: "TIL TIL" → "TILTIL").
+//  B) Detecta "sucursal"/"starken" en la dirección y asigna código de
+//     agencia + tipo entrega 1, cruzando con Puntos Starken.
+// ═══════════════════════════════════════════════════════════════
+
+// Normaliza texto para comparar: sin tildes, mayúsculas, sin dobles espacios.
+function normTxt(s) {
+  return String(s || '').toUpperCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+}
+// Versión sin NINGÚN espacio, para pillar "TIL TIL" == "TILTIL".
+function normSinEspacios(s) {
+  return normTxt(s).replace(/\s+/g, '');
+}
+
+// Sinónimos frecuentes que los clientes escriben → comuna oficial.
+// Ej: "Santiago Centro" es la comuna "Santiago". Se compara normalizado.
+const COMUNA_SINONIMOS = {
+  'SANTIAGOCENTRO': 'SANTIAGO',
+  'STGO': 'SANTIAGO',
+  'STGOCENTRO': 'SANTIAGO',
+  'VINADELMAR': 'Viña del Mar',
+  'CONCE': 'Concepción',
+};
+
+// Índices de búsqueda rápida (se arman una sola vez).
+// Base: las 346 comunas oficiales de Chile (cobertura completa del país).
+// Se complementa con Tarifa Smart (nombres de destinos, útil para variantes)
+// y con las comunas de las sucursales Starken. Así ninguna comuna real
+// (como La Pintana) queda fuera.
+const _comunaIndex = (() => {
+  const exact = new Map();       // norm con espacios -> nombre oficial
+  const compact = new Map();     // norm sin espacios -> nombre oficial
+  const add = c => {
+    const e = normTxt(c), s = normSinEspacios(c);
+    if (!exact.has(e)) exact.set(e, c);
+    if (!compact.has(s)) compact.set(s, c);
+  };
+  // ORDEN IMPORTA: el primero en agregarse gana la escritura. Por eso la RM
+  // (columna E del tarifario Blue) va PRIMERO — es la referencia pedida para
+  // la Región Metropolitana. Luego el resto de Chile como respaldo.
+  COMUNAS_RM_HOMEDELIVERY.forEach(add);                    // RM (prioridad)
+  COMUNAS_CHILE.forEach(add);                              // resto de Chile
+  COMUNAS_OFICIALES.forEach(add);                          // Tarifa Smart
+  SUCURSALES_STARKEN.forEach(su => add(su.comuna.trim())); // sucursales
+  return { exact, compact };
+})();
+
+// Busca la comuna oficial correcta. Devuelve {match, oficial, tipo}.
+function matchComuna(comuna) {
+  const n = normTxt(comuna);
+  const sc = normSinEspacios(comuna);
+  // 0) ¿es un sinónimo conocido? (Santiago Centro -> Santiago)
+  if (COMUNA_SINONIMOS[sc]) return { match: true, oficial: COMUNA_SINONIMOS[sc], tipo: 'sinonimo' };
+  // 1) match exacto
+  if (_comunaIndex.exact.has(n)) return { match: true, oficial: _comunaIndex.exact.get(n), tipo: 'exacta' };
+  // 2) match ignorando espacios (TIL TIL -> TILTIL)
+  if (_comunaIndex.compact.has(sc)) return { match: true, oficial: _comunaIndex.compact.get(sc), tipo: 'espacios' };
+  return { match: false, oficial: '', tipo: 'no_encontrada' };
+}
+
+// Sucursales agrupadas por comuna normalizada (sin espacios para robustez).
+const _sucursalesPorComuna = (() => {
+  const m = new Map();
+  SUCURSALES_STARKEN.forEach(s => {
+    const k = normSinEspacios(s.comuna);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(s);
+  });
+  return m;
+})();
+
+// ¿La dirección menciona sucursal/starken/agencia/retiro?
+function mencionaSucursal(dir) {
+  const d = normTxt(dir);
+  return /\b(SUCURSAL|STARKEN|AGENCIA|RETIRO|RETIRA)\b/.test(d);
+}
+
+function validarComunasYSucursales() {
+  if (!processedData) return;
+  const stkH = processedData.STK_HEADERS;
+  const iDir = stkH.indexOf('*DIRECCION DESTINATARIO');
+  const iCom = stkH.indexOf('*COMUNA DESTINATARIO');
+  const iCodAg = stkH.indexOf('CODIGO AGENCIA DESTINO');
+  const iTipoEnt = stkH.indexOf('*TIPO DE ENTREGA (1)AGENCIA (2)DOMICILIO');
+
+  const filas = [];
+  let comunasCorregidas = 0, sucursalesAuto = 0;
+  const pendientesSucursal = [];  // casos con varias sucursales (elección manual)
+
+  processedData.stkRows.forEach((r, idx) => {
+    const dir = r[iDir] || '';
+    const comuna = r[iCom] || '';
+    const mc = matchComuna(comuna);
+
+    // A) Corregir comuna mal escrita (espacios, tildes, o sinónimo con match claro)
+    let comunaFinal = comuna, notaComuna = '', estadoComuna = 'ok';
+    if (mc.match && (mc.tipo === 'espacios' || mc.tipo === 'sinonimo') && normTxt(mc.oficial) !== normTxt(comuna)) {
+      r[iCom] = mc.oficial; comunaFinal = mc.oficial;
+      notaComuna = `${comuna} → ${mc.oficial}`; estadoComuna = 'fix'; comunasCorregidas++;
+    } else if (!mc.match) {
+      notaComuna = 'Comuna no reconocida — revisar'; estadoComuna = 'warn';
+    }
+
+    // B) ¿Menciona sucursal? Buscar punto Starken en su comuna
+    let notaSuc = '', estadoSuc = '';
+    if (mencionaSucursal(dir)) {
+      const k = normSinEspacios(comunaFinal);
+      const sucs = _sucursalesPorComuna.get(k) || [];
+      if (sucs.length === 1) {
+        r[iCodAg] = sucs[0].cod; r[iTipoEnt] = '1';
+        notaSuc = `Sucursal asignada: cód ${sucs[0].cod} (${sucs[0].dir})`;
+        estadoSuc = 'fix'; sucursalesAuto++;
+      } else if (sucs.length > 1) {
+        notaSuc = `${sucs.length} sucursales en ${comunaFinal} — elige cuál`;
+        estadoSuc = 'warn';
+        pendientesSucursal.push({ idx, comuna: comunaFinal, opciones: sucs });
+      } else {
+        notaSuc = `Menciona sucursal pero no hay punto Starken en ${comunaFinal}`;
+        estadoSuc = 'err';
+      }
+    }
+
+    if (estadoComuna !== 'ok' || estadoSuc) {
+      filas.push({
+        pm: r[stkH.indexOf('OBSERVACION_CLIENTE')] || '',
+        dir, comuna, comunaFinal,
+        notaComuna, estadoComuna, notaSuc, estadoSuc,
+      });
+    }
+  });
+
+  renderValidacionLocal(filas, comunasCorregidas, sucursalesAuto, pendientesSucursal);
+  renderPreview('stk', processedData.stkRows, processedData.STK_HEADERS);
+}
+
+// Aplica la sucursal elegida manualmente (desde el selector).
+function aplicarSucursalManual(idx, cod) {
+  const stkH = processedData.STK_HEADERS;
+  processedData.stkRows[idx][stkH.indexOf('CODIGO AGENCIA DESTINO')] = cod;
+  processedData.stkRows[idx][stkH.indexOf('*TIPO DE ENTREGA (1)AGENCIA (2)DOMICILIO')] = '1';
+  renderPreview('stk', processedData.stkRows, processedData.STK_HEADERS);
+  const el = document.getElementById('sucsel-' + idx);
+  if (el) el.innerHTML = `<span class="val-badge fix">✓ Asignada cód ${cod}</span>`;
+}
+
+function renderValidacionLocal(filas, comunasCorregidas, sucursalesAuto, pendientes) {
+  const cont = document.getElementById('vloc-result');
+  const status = document.getElementById('vloc-status');
+  status.textContent = `✅ ${comunasCorregidas} comuna(s) corregida(s), ${sucursalesAuto} sucursal(es) asignada(s) automáticamente.`;
+
+  let html = '';
+  if (filas.length) {
+    html += `<table><thead><tr><th>Pedido</th><th>Dirección</th><th>Comuna</th><th>Sucursal</th></tr></thead><tbody>`;
+    filas.forEach(f => {
+      const cBadge = f.estadoComuna === 'fix' ? `<span class="val-badge fix">${escHTML(f.notaComuna)}</span>`
+        : f.estadoComuna === 'warn' ? `<span class="val-badge warn">${escHTML(f.notaComuna)}</span>` : '';
+      const sBadge = f.estadoSuc === 'fix' ? `<span class="val-badge fix">${escHTML(f.notaSuc)}</span>`
+        : f.estadoSuc === 'warn' ? `<span class="val-badge warn">${escHTML(f.notaSuc)}</span>`
+        : f.estadoSuc === 'err' ? `<span class="val-badge err">${escHTML(f.notaSuc)}</span>` : '';
+      html += `<tr>
+        <td>${escHTML(f.pm)}</td>
+        <td title="${escHTML(f.dir)}">${escHTML(f.dir.slice(0,40))}</td>
+        <td>${cBadge || escHTML(f.comunaFinal)}</td>
+        <td>${sBadge}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+
+  // Selectores para los casos con varias sucursales
+  if (pendientes.length) {
+    html += `<div style="margin-top:14px;font-weight:600;font-size:13px;">Elige la sucursal (comunas con varias):</div>`;
+    pendientes.forEach(p => {
+      html += `<div id="sucsel-${p.idx}" style="margin:8px 0;padding:8px;background:var(--bg);border-radius:8px;">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">${escHTML(p.comuna)}:</div>`;
+      p.opciones.forEach(s => {
+        html += `<button class="val-btn" style="margin:3px 0;text-align:left;font-size:12px;"
+          onclick="aplicarSucursalManual(${p.idx}, '${s.cod}')">
+          Cód ${s.cod} — ${escHTML(s.dir)}</button>`;
+      });
+      html += `</div>`;
+    });
+  }
+
+  if (!filas.length && !pendientes.length) {
+    html = '<div style="color:var(--muted);font-size:13px;text-align:center;">No se encontraron comunas mal escritas ni menciones de sucursal.</div>';
+  }
+  cont.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+
 function normComuna(s) {
   return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
@@ -1442,8 +1664,12 @@ function buildCSV(headers, rows) {
 async function buildTeLoLlevoXLSX(headers, rows) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Hoja1');
-  // Columnas numéricas según la plantilla oficial
+  // TELÉFONO y VALUACIÓN: siempre número (según plantilla oficial).
   const numCols = new Set(['TELÉFONO', 'VALUACIÓN']);
+  // Columna F (depto/casa/comentario): número SOLO si el valor es puramente
+  // numérico (ej. "5999"); si trae letras (ej. "Casa", "Depto 4B") queda texto.
+  // La plataforma de Te lo Llevo exige número cuando corresponde.
+  const colF = 'NÚMERO DE DEPTO/CASA Y COMENTARIO EN CASO DE HABER';
 
   ws.addRow(headers);
   rows.forEach(r => {
@@ -1452,6 +1678,12 @@ async function buildTeLoLlevoXLSX(headers, rows) {
       if (numCols.has(h)) {
         const n = parseInt(String(v).replace(/\D/g, ''), 10);
         return Number.isFinite(n) ? n : '';   // número real, no texto
+      }
+      if (h === colF) {
+        const s = String(v).trim();
+        // ¿solo dígitos? (sin letras ni símbolos) → número; si no, texto tal cual
+        if (s !== '' && /^\d+$/.test(s)) return parseInt(s, 10);
+        return v;
       }
       return v;
     });
