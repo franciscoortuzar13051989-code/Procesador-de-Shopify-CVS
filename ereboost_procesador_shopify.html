@@ -762,20 +762,25 @@ function processData({ headers, rows }, boletas = {}) {
   );
   const totalOriginal = rows.length;
   if (kFinancial) {
-    // Un order bump hereda el estado del pedido principal → agrupar por kName:
-    // si ALGUNA fila del pedido NO está pagada, se excluye el pedido completo.
+    // Un order bump hereda el estado del pedido principal. En Shopify, la 2ª
+    // línea de un bump viene con Financial Status VACÍO — NO significa impago,
+    // solo que el estado está en la 1ª línea. Por eso:
+    //   - una línea 'paid' marca el pedido como pagado
+    //   - una línea con estado NO vacío y distinto de paid lo marca impago
+    //   - una línea VACÍA se ignora (es línea de bump, hereda del pedido)
     const paidOrders = new Set();
-    const allOrders = new Set();
+    const unpaidOrders = new Set();
     rows.forEach(r => {
       const num = kName ? (r[kName] || '') : '';
       const val = (r[kFinancial] || '').toLowerCase().trim();
-      allOrders.add(num);
+      if (val === '') return;                       // línea de bump: ignorar
       if (val === 'paid' || val === 'pagado') paidOrders.add(num);
-      else paidOrders.delete(num); // una fila impaga descarta todo el pedido
+      else unpaidOrders.add(num);                   // expired/pending/voided/etc
     });
+    // Pasa si tiene alguna línea pagada y NINGUNA línea explícitamente impaga.
     rows = rows.filter(r => {
       const num = kName ? (r[kName] || '') : '';
-      return paidOrders.has(num);
+      return paidOrders.has(num) && !unpaidOrders.has(num);
     });
   }
   const filtradosPago = totalOriginal - rows.length;
