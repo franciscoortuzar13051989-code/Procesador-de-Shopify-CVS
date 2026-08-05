@@ -809,20 +809,23 @@ function processData({ headers, rows }, boletas = {}) {
   const filtrados = totalAntes - rows.length;
   const filtradosTotal = filtradosPago + filtrados;
 
-  // Step 1: resolve order bumps
-  // For each email, find the first row that has a shipping method
-  const emailToSM = {};
+  // Step 1: resolver order bumps
+  // Un order bump son varias líneas del MISMO pedido: la primera trae el
+  // shipping method y las siguientes vienen vacías. Se emparejan por NÚMERO
+  // DE PEDIDO (kName), que es lo que realmente las une — no por email, que
+  // puede repetirse entre pedidos distintos del mismo cliente y fallar.
+  const orderToSM = {};
   rows.forEach(r => {
-    const em = kEmail ? (r[kEmail] || '') : '';
-    const sm = kSM ? (r[kSM] || '') : '';
-    if (em && sm && !emailToSM[em]) emailToSM[em] = sm;
+    const num = kName ? (r[kName] || '') : '';
+    const sm = kSM ? (r[kSM] || '').trim() : '';
+    if (num && sm && !orderToSM[num]) orderToSM[num] = sm;
   });
   let bumps = 0;
   rows.forEach(r => {
     const sm = kSM ? (r[kSM] || '').trim() : '';
-    if (!sm && kEmail) {
-      const em = r[kEmail] || '';
-      if (em && emailToSM[em]) { r[kSM] = emailToSM[em]; bumps++; }
+    if (!sm && kName) {
+      const num = r[kName] || '';
+      if (num && orderToSM[num]) { r[kSM] = orderToSM[num]; bumps++; }
     }
   });
 
