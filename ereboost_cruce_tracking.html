@@ -1,0 +1,699 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ereboost · Cruce de Seguimientos</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #0b0d11;
+  --surface: #13161d;
+  --card: #191d28;
+  --border: #232736;
+  --accent: #5b8af5;
+  --accent2: #f5a45b;
+  --green: #4ef0a0;
+  --yellow: #f5c84a;
+  --pink: #f55b8a;
+  --blue2: #5bd4f5;
+  --text: #e6e9f4;
+  --muted: #626882;
+  --r: 14px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+}
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 48px 48px;
+  opacity: .3;
+  pointer-events: none;
+  z-index: 0;
+}
+.wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+}
+.logo {
+  font-family: 'Syne', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.logo span { color: var(--accent); }
+h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -.5px;
+  margin-bottom: 10px;
+}
+h1 em { font-style: normal; color: var(--accent); }
+.tagline {
+  color: var(--muted);
+  font-size: 13px;
+  font-family: 'DM Mono', monospace;
+  margin-bottom: 36px;
+  line-height: 1.6;
+}
+.hidden { display: none !important; }
+
+.step-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: .06em;
+  margin-bottom: 8px;
+}
+.step-label strong { color: var(--text); }
+
+.drop-zone {
+  border: 1.5px dashed var(--border);
+  border-radius: var(--r);
+  padding: 30px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  background: var(--surface);
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.drop-zone::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(91,138,245,.07) 0%, transparent 70%);
+  pointer-events: none;
+}
+.drop-zone:hover, .drop-zone.drag { border-color: var(--accent); background: rgba(91,138,245,.05); }
+.drop-zone.zoneB:hover, .drop-zone.zoneB.drag { border-color: var(--accent2); background: rgba(245,164,91,.05); }
+.drop-icon { font-size: 30px; margin-bottom: 8px; display: block; }
+.drop-title { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+.drop-sub { color: var(--muted); font-size: 12px; font-family: 'DM Mono', monospace; line-height: 1.6; }
+.drop-zone.loaded { border-style:solid; border-color:var(--green); background:rgba(78,240,160,.05); }
+.drop-zone.loaded .drop-title { color:var(--green); }
+input[type=file] { display: none; }
+
+.process-btn {
+  width: 100%;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, var(--accent), #7b5bf5);
+  border: none;
+  border-radius: var(--r);
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: white;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: all .2s;
+  box-shadow: 0 4px 24px rgba(91,138,245,.3);
+  margin-bottom: 28px;
+}
+.process-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 32px rgba(91,138,245,.45); }
+.process-btn:disabled { opacity: .35; cursor: not-allowed; box-shadow:none; }
+
+.error-box {
+  background: rgba(245,93,138,.08);
+  border: 1px solid rgba(245,93,138,.3);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--pink);
+}
+
+.result-header {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--card);
+  border: 1px solid var(--green);
+  border-radius: var(--r);
+  padding: 18px 22px;
+  margin-bottom: 16px;
+}
+.result-header.warn { border-color: var(--yellow); }
+.result-icon { font-size: 26px; }
+.result-title { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; }
+.result-sub { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 2px; }
+
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 18px 20px; }
+.stat-num { font-family: 'Syne', sans-serif; font-size: 30px; font-weight: 800; }
+.stat-label { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 2px; }
+.stat-card.ok .stat-num { color: var(--green); }
+.stat-card.warnA .stat-num { color: var(--yellow); }
+.stat-card.warnB .stat-num { color: var(--pink); }
+
+.warn-box {
+  background: rgba(245,200,74,.07);
+  border: 1px solid rgba(245,200,74,.25);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+.warn-box strong { color: var(--yellow); }
+.warn-box.pink { background: rgba(245,93,138,.07); border-color: rgba(245,93,138,.25); }
+.warn-box.pink strong { color: var(--pink); }
+.warn-box ul { margin: 8px 0 0 18px; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 12px; line-height: 1.8; }
+
+.preview-wrap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.preview-head {
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.preview-head span.cnt { color: var(--muted); font-weight: 400; font-family:'DM Mono', monospace; font-size:11px; }
+.preview-body { overflow-x: auto; max-height: 360px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead th {
+  background: var(--surface); padding: 9px 12px; text-align: left;
+  font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted);
+  letter-spacing: .04em; border-bottom: 1px solid var(--border);
+  white-space: nowrap; position: sticky; top: 0; z-index: 2;
+}
+tbody tr { border-bottom: 1px solid rgba(255,255,255,.04); }
+tbody tr:hover { background: rgba(255,255,255,.025); }
+tbody td { padding: 8px 12px; white-space: nowrap; font-family:'DM Mono', monospace; }
+
+.filename-box {
+  display: flex; gap: 8px; margin-bottom: 12px;
+}
+.filename-box input {
+  flex:1; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text); font-size: 13px; font-family: 'DM Mono', monospace;
+}
+.filename-box input:focus { outline:none; border-color: var(--accent); }
+
+.download-btn {
+  width: 100%;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, var(--green), #2fb87e);
+  border: none;
+  border-radius: var(--r);
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #06130c;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: all .2s;
+  box-shadow: 0 4px 24px rgba(78,240,160,.25);
+  margin-bottom: 12px;
+}
+.download-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 32px rgba(78,240,160,.4); }
+.download-btn:disabled { opacity:.35; cursor:not-allowed; box-shadow:none; }
+
+.reset-btn {
+  width: 100%; padding: 11px; background: transparent; border: 1px solid var(--border);
+  color: var(--muted); border-radius: 10px; font-size: 12px; cursor: pointer;
+  font-family: 'DM Mono', monospace; transition: all .15s; margin-bottom: 40px;
+}
+.reset-btn:hover { border-color: var(--muted); color: var(--text); }
+
+.how { border-top: 1px solid var(--border); padding-top: 28px; margin-top: 8px; }
+.how h2 {
+  font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 14px;
+}
+.steps { display: flex; flex-direction: column; gap: 14px; }
+.step { display: flex; gap: 14px; align-items: flex-start; }
+.step-num {
+  font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 800; color: var(--accent);
+  background: var(--card); border: 1px solid var(--border); border-radius: 7px;
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 1px;
+}
+.step-text strong { display: block; font-size: 13px; margin-bottom: 2px; }
+.step-text span { font-size: 12px; color: var(--muted); line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="logo">EREBOOST <span>·</span> LOGÍSTICA</div>
+  <h1>Cruce de <em>Seguimientos</em></h1>
+  <div class="tagline">
+    Junta el número de boleta con su pedido Shopify y con su número de seguimiento Starken,
+    y arma directo el archivo listo para subir a la app de tracking.
+  </div>
+
+  <div id="error-box" class="error-box hidden"></div>
+
+  <!-- ZONA A: Starken CSV (boleta -> pedido) -->
+  <div class="step-label">1 · <strong>CSV que subes a Starken/Moxila</strong> (boleta ↔ pedido)</div>
+  <div class="drop-zone" id="drop-a" onclick="document.getElementById('file-a').click()">
+    <span class="drop-icon">📄</span>
+    <div class="drop-title" id="drop-a-title">Arrastra o haz clic — Starken_YYYY-MM-DD.csv</div>
+    <div class="drop-sub" id="drop-a-sub">Columnas: NUMERO DOCUMENTO_1 (boleta) · OBSERVACION_CLIENTE (pedido)</div>
+  </div>
+  <input type="file" id="file-a" accept=".csv" />
+
+  <!-- ZONA B: Reporte Buzón Histórico (boleta -> tracking) -->
+  <div class="step-label">2 · <strong>Reporte Buzón Histórico</strong> que entrega Starken (boleta ↔ seguimiento)</div>
+  <div class="drop-zone zoneB" id="drop-b" onclick="document.getElementById('file-b').click()">
+    <span class="drop-icon">📦</span>
+    <div class="drop-title" id="drop-b-title">Arrastra o haz clic — ReporteBuzonHistorico.xls</div>
+    <div class="drop-sub" id="drop-b-sub">Columnas: NUM. DOC. (boleta) · ORDEN FLETE (seguimiento)</div>
+  </div>
+  <input type="file" id="file-b" accept=".xls,.xlsx" />
+
+  <button class="process-btn" id="process-btn" onclick="cruzar()" disabled>
+    🔗 &nbsp;Cruzar y generar archivo de seguimiento
+  </button>
+
+  <div id="results" class="hidden">
+
+    <div class="result-header" id="result-header">
+      <div class="result-icon">✅</div>
+      <div>
+        <div class="result-title" id="result-title"></div>
+        <div class="result-sub" id="result-sub"></div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat-card ok"><div class="stat-num" id="cnt-ok">0</div><div class="stat-label">Cruzados OK</div></div>
+      <div class="stat-card warnA"><div class="stat-num" id="cnt-sin-tracking">0</div><div class="stat-label">Pedidos sin tracking</div></div>
+      <div class="stat-card warnB"><div class="stat-num" id="cnt-sin-pedido">0</div><div class="stat-label">Tracking sin pedido</div></div>
+    </div>
+
+    <div id="warn-sospechosos" class="warn-box hidden">
+      <strong>ℹ️ Ventas por formulario (no Shopify) — excluidas automáticamente</strong>
+      <div style="color:var(--muted);font-size:12px;margin-top:4px;">
+        Boleta con menos de 5 dígitos = venta registrada por formulario/otro sistema, no por Shopify.
+        No corresponde subirlas a este archivo, así que se dejan afuera solas.
+      </div>
+      <ul id="list-sospechosos"></ul>
+    </div>
+
+    <div id="warn-sin-tracking" class="warn-box hidden">
+      <strong>⚠ Boletas de Starken sin número de seguimiento todavía</strong>
+      <div style="color:var(--muted);font-size:12px;margin-top:4px;">
+        Starken aún no generó tracking para estas boletas (revisa de nuevo más tarde o vuelve a exportar el Buzón Histórico).
+      </div>
+      <ul id="list-sin-tracking"></ul>
+    </div>
+
+    <div id="warn-sin-pedido" class="warn-box pink hidden">
+      <strong>⚠ Boletas del Buzón Histórico que no están en tu CSV de Starken</strong>
+      <div style="color:var(--muted);font-size:12px;margin-top:4px;">
+        Probablemente son de otro día/lote — no se incluyen en el archivo final.
+      </div>
+      <ul id="list-sin-pedido"></ul>
+    </div>
+
+    <div id="warn-duplicados" class="warn-box hidden">
+      <strong>⚠ Boletas duplicadas</strong>
+      <ul id="list-duplicados"></ul>
+    </div>
+
+    <div class="preview-wrap">
+      <div class="preview-head">
+        <span>Vista previa — archivo final</span>
+        <span class="cnt" id="preview-cnt"></span>
+      </div>
+      <div class="preview-body">
+        <table>
+          <thead><tr><th>Order number</th><th>tracking number</th><th>shipping carrier</th><th>tracking link</th></tr></thead>
+          <tbody id="preview-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="filename-box">
+      <input type="text" id="filename-input" spellcheck="false" />
+    </div>
+    <button class="download-btn" id="download-btn" onclick="downloadCSV()">
+      ⬇ &nbsp;Descargar CSV de seguimiento
+    </button>
+    <button class="reset-btn" onclick="resetTool()">↺ Cruzar otro lote</button>
+  </div>
+
+  <div class="how" id="how-section">
+    <h2>¿Qué hace esta herramienta?</h2>
+    <div class="steps">
+      <div class="step">
+        <span class="step-num">01</span>
+        <div class="step-text"><strong>Lee el CSV que subiste a Starken</strong><span>Ahí está la boleta (NUMERO DOCUMENTO_1) asociada al número de pedido de Shopify (OBSERVACION_CLIENTE).</span></div>
+      </div>
+      <div class="step">
+        <span class="step-num">02</span>
+        <div class="step-text"><strong>Lee el Reporte Buzón Histórico</strong><span>Ahí está la misma boleta (NUM. DOC.) asociada al número de seguimiento que generó Starken (ORDEN FLETE).</span></div>
+      </div>
+      <div class="step">
+        <span class="step-num">03</span>
+        <div class="step-text"><strong>Cruza ambos por número de boleta</strong><span>Así obtiene, para cada pedido, su número de seguimiento — sin importar el orden en que vengan los archivos.</span></div>
+      </div>
+      <div class="step">
+        <span class="step-num">04</span>
+        <div class="step-text"><strong>Avisa lo que falta</strong><span>Pedidos sin tracking todavía, o tracking de boletas que no están en tu lote — para que revises antes de subir.</span></div>
+      </div>
+      <div class="step">
+        <span class="step-num">05</span>
+        <div class="step-text"><strong>Genera el CSV listo para Shopify</strong><span>Mismo formato exacto: Order number;tracking number;shipping carrier;tracking link</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let fileA = null; // {name, rows: [{boleta, order, raw}]}
+let fileB = null; // {name, rows: [{boleta, tracking}]}
+let joined = null;
+
+const TRACKING_LINK = 'https://www.starken.cl/seguimiento';
+
+function showError(msg) {
+  const box = document.getElementById('error-box');
+  box.textContent = msg;
+  box.classList.remove('hidden');
+}
+function clearError() { document.getElementById('error-box').classList.add('hidden'); }
+
+// ── normalización de headers y de boletas ──
+function normHeader(s) {
+  return String(s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/^\*+/, '').replace(/\s+/g, ' ').trim();
+}
+function findCol(headers, ...candidates) {
+  const normed = headers.map(normHeader);
+  for (const cand of candidates) {
+    const nc = normHeader(cand);
+    let i = normed.indexOf(nc);
+    if (i !== -1) return i;
+  }
+  for (const cand of candidates) {
+    const nc = normHeader(cand);
+    let i = normed.findIndex(h => h.includes(nc) || nc.includes(h));
+    if (i !== -1) return i;
+  }
+  return -1;
+}
+// Clave de boleta: solo dígitos, sin ceros a la izquierda (para que "045373" == "45373").
+function boletaKey(v) {
+  const digits = String(v == null ? '' : v).replace(/[^\d]/g, '');
+  if (!digits) return '';
+  return String(parseInt(digits, 10));
+}
+function trackingStr(v) {
+  if (v == null) return '';
+  if (typeof v === 'number') return String(Math.round(v));
+  return String(v).trim();
+}
+
+// ── Parseo CSV Starken (';' separado, boleta -> pedido) ──
+function parseStarkenCSV(text) {
+  const lines = text.split(/\r\n|\n|\r/).filter(l => l.length > 0);
+  if (!lines.length) throw new Error('El CSV de Starken está vacío.');
+  const headers = lines[0].split(';');
+  const iBoleta = findCol(headers, 'NUMERO DOCUMENTO_1');
+  const iOrder  = findCol(headers, 'OBSERVACION_CLIENTE');
+  if (iBoleta === -1) throw new Error('No encontré la columna NUMERO DOCUMENTO_1 (boleta) en el CSV de Starken.');
+  if (iOrder === -1) throw new Error('No encontré la columna OBSERVACION_CLIENTE (pedido) en el CSV de Starken.');
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(';');
+    const rawBoleta = (cols[iBoleta] || '').trim();
+    const rawOrder = (cols[iOrder] || '').trim();
+    if (!rawBoleta && !rawOrder) continue;
+    rows.push({ boleta: boletaKey(rawBoleta), rawBoleta, order: rawOrder.replace(/^#/, '') });
+  }
+  return rows;
+}
+
+// ── Parseo XLS/XLSX Buzón Histórico (boleta -> tracking) ──
+function parseBuzonXLSX(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, { type: 'array' });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+  if (!grid.length) throw new Error('El Reporte Buzón Histórico está vacío.');
+  const headers = grid[0];
+  const iBoleta = findCol(headers, 'NUM. DOC.', 'NUM DOC', 'NUMERO DOCUMENTO');
+  const iTrack  = findCol(headers, 'ORDEN FLETE');
+  if (iBoleta === -1) throw new Error('No encontré la columna NUM. DOC. (boleta) en el Buzón Histórico.');
+  if (iTrack === -1) throw new Error('No encontré la columna ORDEN FLETE (seguimiento) en el Buzón Histórico.');
+
+  const rows = [];
+  for (let i = 1; i < grid.length; i++) {
+    const r = grid[i];
+    if (!r || r.every(c => c === '' || c == null)) continue;
+    const rawBoleta = r[iBoleta];
+    const rawTrack = r[iTrack];
+    if (rawBoleta === '' && rawTrack === '') continue;
+    rows.push({ boleta: boletaKey(rawBoleta), rawBoleta, tracking: trackingStr(rawTrack) });
+  }
+  return rows;
+}
+
+// ── Manejo de carga de archivos ──
+function setupDropZone(zoneId, inputId, onFile) {
+  const zone = document.getElementById(zoneId);
+  const input = document.getElementById(inputId);
+  input.addEventListener('change', e => { if (e.target.files[0]) onFile(e.target.files[0]); });
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag');
+    if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
+  });
+}
+
+function updateProcessBtn() {
+  document.getElementById('process-btn').disabled = !(fileA && fileB);
+}
+
+setupDropZone('drop-a', 'file-a', file => {
+  clearError();
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const rows = parseStarkenCSV(e.target.result);
+      fileA = { name: file.name, rows };
+      document.getElementById('drop-a').classList.add('loaded');
+      document.getElementById('drop-a-title').textContent = '✓ ' + file.name;
+      document.getElementById('drop-a-sub').textContent = `${rows.length} pedido(s) leídos`;
+      updateProcessBtn();
+    } catch (err) { showError('Starken CSV: ' + err.message); }
+  };
+  reader.readAsText(file, 'windows-1252');
+});
+
+setupDropZone('drop-b', 'file-b', file => {
+  clearError();
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const rows = parseBuzonXLSX(e.target.result);
+      fileB = { name: file.name, rows };
+      document.getElementById('drop-b').classList.add('loaded');
+      document.getElementById('drop-b-title').textContent = '✓ ' + file.name;
+      document.getElementById('drop-b-sub').textContent = `${rows.length} seguimiento(s) leídos`;
+      updateProcessBtn();
+    } catch (err) { showError('Buzón Histórico: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+// Boletas de venta por Shopify siempre tienen 5 dígitos. Boletas más cortas
+// (1, 2, 3 dígitos) son ventas por formulario/otro sistema — no van en este
+// archivo porque no existen como pedido en Shopify. Se excluyen siempre.
+function esBoletaShopify(boleta) {
+  return /^\d{5}$/.test(String(boleta || ''));
+}
+
+// ── Cruce ──
+function cruzar() {
+  clearError();
+  if (!fileA || !fileB) return;
+
+  // Detectar duplicados dentro de cada archivo (por boleta)
+  const dupsA = findDuplicateBoletas(fileA.rows);
+  const dupsB = findDuplicateBoletas(fileB.rows);
+
+  // Mapa boleta -> tracking (buzón). Si hay duplicados se queda con el primero.
+  const buzonMap = new Map();
+  fileB.rows.forEach(r => { if (r.boleta && !buzonMap.has(r.boleta)) buzonMap.set(r.boleta, r); });
+
+  const matched = [];       // {order, tracking}
+  const sinTracking = [];   // boletas de starken sin match en buzón
+  const sospechosos = [];   // boleta de menos de 5 dígitos — venta por formulario, no Shopify
+  const usedBoletas = new Set();
+
+  fileA.rows.forEach(r => {
+    if (!r.boleta || !r.order) return;
+    if (!esBoletaShopify(r.boleta)) {
+      sospechosos.push({ order: r.order, boleta: r.rawBoleta || r.boleta });
+      return; // venta por formulario — nunca se incluye en este archivo
+    }
+    usedBoletas.add(r.boleta);
+    const b = buzonMap.get(r.boleta);
+    if (b) {
+      matched.push({ order: r.order, tracking: b.tracking, boleta: r.boleta });
+    } else {
+      sinTracking.push({ order: r.order, boleta: r.rawBoleta || r.boleta });
+    }
+  });
+
+  const sinPedido = fileB.rows.filter(r => r.boleta && !usedBoletas.has(r.boleta) && !sospechosos.some(s => s.boleta === r.rawBoleta));
+
+  joined = { matched, sinTracking, sinPedido, dupsA, dupsB, sospechosos };
+  renderResults();
+}
+
+function findDuplicateBoletas(rows) {
+  const seen = new Map();
+  const dups = new Set();
+  rows.forEach(r => {
+    if (!r.boleta) return;
+    if (seen.has(r.boleta)) dups.add(r.boleta);
+    seen.set(r.boleta, true);
+  });
+  return Array.from(dups);
+}
+
+function escHTML(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderResults() {
+  document.getElementById('results').classList.remove('hidden');
+  const { matched, sinTracking, sinPedido, dupsA, dupsB } = joined;
+
+  const header = document.getElementById('result-header');
+  const title = document.getElementById('result-title');
+  const sub = document.getElementById('result-sub');
+  const sospechosos = joined.sospechosos || [];
+  // Las ventas por formulario (sospechosos) son esperadas y no cuentan como alerta;
+  // solo pedidos sin tracking, tracking sin pedido, o duplicados ameritan advertencia.
+  if (sinTracking.length === 0 && sinPedido.length === 0 && dupsA.length === 0 && dupsB.length === 0) {
+    header.classList.remove('warn');
+    document.querySelector('#result-header .result-icon').textContent = '✅';
+    title.textContent = `${matched.length} pedidos cruzados correctamente`;
+    sub.textContent = `${fileA.name} + ${fileB.name}`;
+  } else {
+    header.classList.add('warn');
+    document.querySelector('#result-header .result-icon').textContent = '⚠️';
+    title.textContent = `${matched.length} cruzados — revisa las alertas`;
+    sub.textContent = `${fileA.name} + ${fileB.name}`;
+  }
+
+  document.getElementById('cnt-ok').textContent = matched.length;
+  document.getElementById('cnt-sin-tracking').textContent = sinTracking.length;
+  document.getElementById('cnt-sin-pedido').textContent = sinPedido.length;
+
+  const wSospechosos = document.getElementById('warn-sospechosos');
+  const listSospechosos = document.getElementById('list-sospechosos');
+  if (joined.sospechosos && joined.sospechosos.length) {
+    wSospechosos.classList.remove('hidden');
+    listSospechosos.innerHTML = joined.sospechosos.map(x => `<li>Pedido "${escHTML(x.order)}" — boleta "${escHTML(x.boleta)}"</li>`).join('');
+  } else wSospechosos.classList.add('hidden');
+
+  const wSinTracking = document.getElementById('warn-sin-tracking');
+  const listSinTracking = document.getElementById('list-sin-tracking');
+  if (sinTracking.length) {
+    wSinTracking.classList.remove('hidden');
+    listSinTracking.innerHTML = sinTracking.map(x => `<li>Pedido #${escHTML(x.order)} — boleta ${escHTML(x.boleta)}</li>`).join('');
+  } else wSinTracking.classList.add('hidden');
+
+  const wSinPedido = document.getElementById('warn-sin-pedido');
+  const listSinPedido = document.getElementById('list-sin-pedido');
+  if (sinPedido.length) {
+    wSinPedido.classList.remove('hidden');
+    listSinPedido.innerHTML = sinPedido.map(x => `<li>Boleta ${escHTML(x.rawBoleta)} — tracking ${escHTML(x.tracking)}</li>`).join('');
+  } else wSinPedido.classList.add('hidden');
+
+  const wDup = document.getElementById('warn-duplicados');
+  const listDup = document.getElementById('list-duplicados');
+  const allDups = [...new Set([...dupsA, ...dupsB])];
+  if (allDups.length) {
+    wDup.classList.remove('hidden');
+    listDup.innerHTML = allDups.map(b => `<li>Boleta ${escHTML(b)} aparece más de una vez — revisa manualmente</li>`).join('');
+  } else wDup.classList.add('hidden');
+
+  document.getElementById('preview-cnt').textContent = `${matched.length} fila(s)`;
+  document.getElementById('preview-tbody').innerHTML = matched.map(m => `
+    <tr>
+      <td>#${escHTML(m.order)}</td>
+      <td>${escHTML(m.tracking)}</td>
+      <td>starken</td>
+      <td style="color:var(--muted)">${TRACKING_LINK}</td>
+    </tr>`).join('');
+
+  document.getElementById('filename-input').value = suggestFilename();
+  document.getElementById('download-btn').disabled = matched.length === 0;
+}
+
+function suggestFilename() {
+  const m = (fileA?.name || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+  let dd, mm;
+  if (m) { dd = m[3]; mm = m[2]; }
+  else {
+    const d = new Date();
+    dd = String(d.getDate()).padStart(2, '0');
+    mm = String(d.getMonth() + 1).padStart(2, '0');
+  }
+  return `Seguimiento_${dd}_${mm}.csv`;
+}
+
+// ── Descarga ──
+function downloadCSV() {
+  if (!joined || !joined.matched.length) return;
+  const lines = ['Order number;tracking number;shipping carrier;tracking link;;;;;'];
+  joined.matched.forEach(m => {
+    lines.push(`#${m.order};${m.tracking};starken;${TRACKING_LINK};;;;;`);
+  });
+  const csv = lines.join('\r\n') + '\r\n';
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (document.getElementById('filename-input').value || suggestFilename()).trim();
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function resetTool() {
+  fileA = null; fileB = null; joined = null;
+  document.getElementById('file-a').value = '';
+  document.getElementById('file-b').value = '';
+  ['drop-a','drop-b'].forEach(id => document.getElementById(id).classList.remove('loaded'));
+  document.getElementById('drop-a-title').textContent = 'Arrastra o haz clic — Starken_YYYY-MM-DD.csv';
+  document.getElementById('drop-a-sub').textContent = 'Columnas: NUMERO DOCUMENTO_1 (boleta) · OBSERVACION_CLIENTE (pedido)';
+  document.getElementById('drop-b-title').textContent = 'Arrastra o haz clic — ReporteBuzonHistorico.xls';
+  document.getElementById('drop-b-sub').textContent = 'Columnas: NUM. DOC. (boleta) · ORDEN FLETE (seguimiento)';
+  document.getElementById('results').classList.add('hidden');
+  clearError();
+  updateProcessBtn();
+}
+</script>
+</body>
+</html>
