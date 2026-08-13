@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -472,12 +473,12 @@ tbody td { padding: 8px 12px; white-space: nowrap; max-width: 180px; overflow: h
     <!-- VALIDADOR DE COMUNAS Y SUCURSALES (sin internet) -->
     <div class="validador" id="validador-local-box">
       <div class="validador-head">
-        <span>🏢 Validar comunas y sucursales (Starken)</span>
+        <span>🏢 Validar comunas y sucursales</span>
         <span class="validador-info">Sin internet · datos Dic24</span>
       </div>
       <div class="validador-body">
         <button class="val-btn" onclick="validarComunasYSucursales()">
-          Corregir comunas mal escritas y asignar sucursales
+          Corregir comunas mal escritas (Starken, Te lo Llevo y Blue) y asignar sucursales (Starken)
         </button>
         <div id="vloc-status" class="val-status"></div>
         <div id="vloc-result" class="val-result"></div>
@@ -1404,6 +1405,7 @@ function validarComunasYSucursales() {
 
     if (estadoComuna !== 'ok' || estadoSuc) {
       filas.push({
+        courier: 'Starken',
         pm: r[stkH.indexOf('OBSERVACION_CLIENTE')] || '',
         dir, comuna, comunaFinal,
         notaComuna, estadoComuna, notaSuc, estadoSuc,
@@ -1411,8 +1413,44 @@ function validarComunasYSucursales() {
     }
   });
 
+  // ── TE LO LLEVO y BLUE EXPRESS: mismo arreglo de comuna (sinónimos como
+  //    "Santiago Centro" → "Santiago", espacios, tildes). No aplica lo de
+  //    sucursal/agencia porque esos couriers no usan ese campo. ──
+  const corregirComunaGenerica = (rows, courierLabel, dirKey, comKey) => {
+    (rows || []).forEach(r => {
+      const dir = r[dirKey] || '';
+      const comuna = r[comKey] || '';
+      if (!comuna) return;
+      const mc = matchComuna(comuna);
+      if (mc.match && (mc.tipo === 'espacios' || mc.tipo === 'sinonimo') && normTxt(mc.oficial) !== normTxt(comuna)) {
+        r[comKey] = mc.oficial;
+        comunasCorregidas++;
+        filas.push({
+          courier: courierLabel, pm: '', dir, comuna, comunaFinal: mc.oficial,
+          notaComuna: `${comuna} → ${mc.oficial}`, estadoComuna: 'fix', notaSuc: '', estadoSuc: '',
+        });
+      } else if (!mc.match) {
+        filas.push({
+          courier: courierLabel, pm: '', dir, comuna, comunaFinal: comuna,
+          notaComuna: 'Comuna no reconocida — revisar', estadoComuna: 'warn', notaSuc: '', estadoSuc: '',
+        });
+      }
+    });
+  };
+
+  corregirComunaGenerica(
+    processedData.tllRows, 'Te lo Llevo',
+    'DIRECCIÓN (Ingresar sólo la calle y el número)', 'COMUNA'
+  );
+  corregirComunaGenerica(
+    processedData.bluRows, 'Blue Express',
+    'DIRECCIÓN', 'COMUNA'
+  );
+
   renderValidacionLocal(filas, comunasCorregidas, sucursalesAuto, pendientesSucursal);
   renderPreview('stk', processedData.stkRows, processedData.STK_HEADERS);
+  renderPreview('tll', processedData.tllRows);
+  renderPreview('blu', processedData.bluRows);
 }
 
 // Aplica la sucursal elegida manualmente (desde el selector).
@@ -1432,7 +1470,7 @@ function renderValidacionLocal(filas, comunasCorregidas, sucursalesAuto, pendien
 
   let html = '';
   if (filas.length) {
-    html += `<table><thead><tr><th>Pedido</th><th>Dirección</th><th>Comuna</th><th>Sucursal</th></tr></thead><tbody>`;
+    html += `<table><thead><tr><th>Courier</th><th>Pedido</th><th>Dirección</th><th>Comuna</th><th>Sucursal</th></tr></thead><tbody>`;
     filas.forEach(f => {
       const cBadge = f.estadoComuna === 'fix' ? `<span class="val-badge fix">${escHTML(f.notaComuna)}</span>`
         : f.estadoComuna === 'warn' ? `<span class="val-badge warn">${escHTML(f.notaComuna)}</span>` : '';
@@ -1440,6 +1478,7 @@ function renderValidacionLocal(filas, comunasCorregidas, sucursalesAuto, pendien
         : f.estadoSuc === 'warn' ? `<span class="val-badge warn">${escHTML(f.notaSuc)}</span>`
         : f.estadoSuc === 'err' ? `<span class="val-badge err">${escHTML(f.notaSuc)}</span>` : '';
       html += `<tr>
+        <td>${escHTML(f.courier || 'Starken')}</td>
         <td>${escHTML(f.pm)}</td>
         <td title="${escHTML(f.dir)}">${escHTML(f.dir.slice(0,40))}</td>
         <td>${cBadge || escHTML(f.comunaFinal)}</td>
